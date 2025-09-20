@@ -1,0 +1,54 @@
+{
+    "name": "kode/http-client",
+    "description": "A high-performance, secure, and robust HTTP client for PHP 8.1+ with support for multi-process, multi-threading, and coroutine environments (Fiber/Swoole/Swow)",
+    "type": "library",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "Kode Framework Team",
+            "email": "team@kode-framework.org"
+        }
+    ],
+    "require": {
+        "php": "^8.1",
+        "kode/context": "^1.0",
+        "psr/http-message": "^1.0|^2.0",
+        "psr/http-client": "^1.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^12.0",
+        "amphp/http-client": "^4.0",
+        "amphp/socket": "^1.0",
+        "guzzlehttp/psr7": "^2.1"
+    },
+    "suggest": {
+        "ext-swoole": "For Swoole coroutine support",
+        "ext-swow": "For Swow coroutine support",
+        "amphp/http-client": "For Amp HTTP client driver",
+        "react/http": "For ReactPHP HTTP client driver"
+    },
+    "autoload": {
+        "psr-4": {
+            "Kode\\HttpClient\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Kode\\HttpClient\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "1.0-dev"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "scripts": {
+        "test": "phpunit",
+        "test-coverage": "phpunit --coverage-html coverage"
+    }
+}

@@ -1,0 +1,14 @@
+.env
+runtime
+.idea
+.vscode
+.gitmodules
+.svn
+.lock
+.DS_Store
+.trae
+*/.cursor
+404.html
+thumbs.db
+vendor/
+composer.lock
