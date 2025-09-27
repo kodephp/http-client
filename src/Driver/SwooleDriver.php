@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Kode\HttpClient\Driver;
 
-use Kode\Context\Context;
+use Kode\HttpClient\Context\Context;
 use Kode\HttpClient\Exception\NetworkException;
 use Kode\HttpClient\Exception\RequestException;
 use Psr\Http\Message\RequestInterface;

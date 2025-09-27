@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Kode\HttpClient;
 
-use Kode\Context\Context;
+use Kode\HttpClient\Context\Context;
 use Kode\HttpClient\Driver\DriverInterface;
 use Kode\HttpClient\Exception\HttpException;
 use Kode\HttpClient\Middleware\MiddlewareStack;

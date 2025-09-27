@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Kode\HttpClient\Middleware;
 
-use Kode\Context\Context;
+use Kode\HttpClient\Context\Context;
 use Kode\HttpClient\Exception\HttpException;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;

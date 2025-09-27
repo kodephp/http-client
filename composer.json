@@ -29,7 +29,8 @@
     },
     "autoload": {
         "psr-4": {
-            "Kode\\HttpClient\\": "src/"
+            "Kode\\HttpClient\\": "src/",
+            "Kode\\HttpClient\\Context\\": "src/Context/"
         }
     },
     "autoload-dev": {
@@ -49,6 +50,7 @@
     "prefer-stable": true,
     "scripts": {
         "test": "phpunit",
-        "test-coverage": "phpunit --coverage-html coverage"
+        "test-coverage": "phpunit --coverage-html coverage",
+        "test-middlewares": "phpunit tests/MiddlewareTest.php"
     }
 }
