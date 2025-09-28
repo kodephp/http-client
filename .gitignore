@@ -12,3 +12,4 @@ runtime
 thumbs.db
 vendor/
 composer.lock
+.phpunit.cache
