@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Kode\HttpClient\Middleware;
 
-use Kode\HttpClient\Context\Context;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 
@@ -12,11 +11,18 @@ use Psr\Http\Message\ResponseInterface;
  * 日志记录中间件
  *
  * 记录请求和响应的详细信息
+ * 支持自定义日志记录器
+ *
+ * @package Kode\HttpClient\Middleware
+ * @author  Kode Team <382601296@qq.com>
+ * @license Apache-2.0
  */
-class LoggingMiddleware implements MiddlewareInterface
+final class LoggingMiddleware implements MiddlewareInterface
 {
     /**
-     * @var callable 日志记录器
+     * 日志记录器
+     *
+     * @var callable
      */
     private $logger;
 
@@ -33,52 +39,43 @@ class LoggingMiddleware implements MiddlewareInterface
     /**
      * 处理请求
      *
-     * @param RequestInterface $request 请求对象
-     * @param Context $context 请求上下文
-     * @param callable $next 下一个中间件
-     * @return ResponseInterface 响应对象
+     * @param RequestInterface $request PSR-7 请求对象
+     * @param callable $next 下一个处理器
+     * @return ResponseInterface PSR-7 响应对象
      */
-    public function process(RequestInterface $request, Context $context, callable $next): ResponseInterface
+    public function process(RequestInterface $request, callable $next): ResponseInterface
     {
-        // 记录请求开始时间
         $startTime = microtime(true);
-        
-        // 记录请求信息
+
         $requestLog = sprintf(
-            'HTTP Request: %s %s',
+            '[HTTP 请求] %s %s',
             $request->getMethod(),
             $request->getUri()
         );
-        
         ($this->logger)($requestLog);
 
         try {
-            // 执行下一个中间件
-            $response = $next($request, $context);
-            
-            // 记录响应信息
+            $response = $next($request);
+
             $duration = (microtime(true) - $startTime) * 1000;
             $responseLog = sprintf(
-                'HTTP Response: %d %s (%.2f ms)',
+                '[HTTP 响应] 状态码: %d %s | 耗时: %.2f ms',
                 $response->getStatusCode(),
                 $response->getReasonPhrase(),
                 $duration
             );
-            
             ($this->logger)($responseLog);
-            
+
             return $response;
-        } catch (\Exception $e) {
-            // 记录异常信息
+        } catch (\Throwable $e) {
             $duration = (microtime(true) - $startTime) * 1000;
             $errorLog = sprintf(
-                'HTTP Error: %s (%.2f ms)',
+                '[HTTP 错误] %s | 耗时: %.2f ms',
                 $e->getMessage(),
                 $duration
             );
-            
             ($this->logger)($errorLog);
-            
+
             throw $e;
         }
     }

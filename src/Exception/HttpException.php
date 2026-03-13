@@ -8,19 +8,25 @@ use Psr\Http\Client\ClientExceptionInterface;
 
 /**
  * HTTP 异常基类
+ *
+ * 所有 HTTP 客户端异常的基类
+ * 遵循 PSR-18 规范
+ *
+ * @package Kode\HttpClient\Exception
+ * @author  Kode Team <382601296@qq.com>
+ * @license Apache-2.0
  */
 class HttpException extends \Exception implements ClientExceptionInterface
 {
     /**
-     * @var string|null 请求 URI
+     * 请求 URI
      */
-    private ?string $requestUri = null;
+    protected ?string $requestUri = null;
 
     /**
      * 设置请求 URI
      *
      * @param string $uri 请求 URI
-     * @return void
      */
     public function setRequestUri(string $uri): void
     {

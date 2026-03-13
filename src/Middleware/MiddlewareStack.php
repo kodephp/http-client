@@ -4,26 +4,32 @@ declare(strict_types=1);
 
 namespace Kode\HttpClient\Middleware;
 
-use Kode\HttpClient\Context\Context;
-use Kode\HttpClient\Exception\HttpException;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 
 /**
  * 中间件栈
+ *
+ * 管理和执行中间件链
+ * 支持中间件的添加和链式调用
+ *
+ * @package Kode\HttpClient\Middleware
+ * @author  Kode Team <382601296@qq.com>
+ * @license Apache-2.0
  */
-class MiddlewareStack
+final class MiddlewareStack
 {
     /**
-     * @var MiddlewareInterface[] 中间件数组
+     * 中间件数组
+     *
+     * @var array<int, MiddlewareInterface>
      */
     private array $middlewares = [];
 
     /**
      * 添加中间件
      *
-     * @param MiddlewareInterface $middleware 中间件
-     * @return void
+     * @param MiddlewareInterface $middleware 中间件实例
      */
     public function add(MiddlewareInterface $middleware): void
     {
@@ -33,17 +39,14 @@ class MiddlewareStack
     /**
      * 处理请求
      *
-     * @param RequestInterface $request 请求对象
-     * @param Context $context 请求上下文
+     * @param RequestInterface $request PSR-7 请求对象
      * @param callable $handler 最终处理器
-     * @return ResponseInterface 响应对象
-     *
-     * @throws HttpException 当发生网络错误或协议错误时抛出
+     * @return ResponseInterface PSR-7 响应对象
      */
-    public function handle(RequestInterface $request, Context $context, callable $handler): ResponseInterface
+    public function handle(RequestInterface $request, callable $handler): ResponseInterface
     {
         $next = $this->createNextHandler($handler, 0);
-        return $next($request, $context);
+        return $next($request);
     }
 
     /**
@@ -55,20 +58,33 @@ class MiddlewareStack
      */
     private function createNextHandler(callable $handler, int $index): callable
     {
-        // 如果已经处理完所有中间件，则调用最终处理器
         if ($index >= count($this->middlewares)) {
             return $handler;
         }
 
-        // 获取当前中间件
         $middleware = $this->middlewares[$index];
-
-        // 创建下一个处理器
         $next = $this->createNextHandler($handler, $index + 1);
 
-        // 返回当前中间件的处理函数
-        return function (RequestInterface $request, Context $context) use ($middleware, $next): ResponseInterface {
-            return $middleware->process($request, $context, $next);
-        };
+        return fn(RequestInterface $request): ResponseInterface => $middleware->process($request, $next);
+    }
+
+    /**
+     * 获取中间件数量
+     *
+     * @return int 中间件数量
+     */
+    public function count(): int
+    {
+        return count($this->middlewares);
+    }
+
+    /**
+     * 检查中间件栈是否为空
+     *
+     * @return bool 是否为空
+     */
+    public function isEmpty(): bool
+    {
+        return empty($this->middlewares);
     }
 }

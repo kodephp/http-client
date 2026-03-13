@@ -13,23 +13,28 @@ use Psr\Http\Message\ResponseInterface;
  * 重试中间件
  *
  * 支持网络异常重试和指数退避策略
+ * 自动重试失败的请求
+ *
+ * @package Kode\HttpClient\Middleware
+ * @author  Kode Team <382601296@qq.com>
+ * @license Apache-2.0
  */
-class RetryMiddleware implements MiddlewareInterface
+final class RetryMiddleware implements MiddlewareInterface
 {
     /**
-     * @var int 最大重试次数
+     * 最大重试次数
      */
-    private int $maxRetries;
+    private readonly int $maxRetries;
 
     /**
-     * @var int 初始退避时间（毫秒）
+     * 初始退避时间（毫秒）
      */
-    private int $initialBackoff;
+    private readonly int $initialBackoff;
 
     /**
-     * @var float 退避乘数
+     * 退避乘数
      */
-    private float $backoffMultiplier;
+    private readonly float $backoffMultiplier;
 
     /**
      * 构造函数
@@ -49,58 +54,36 @@ class RetryMiddleware implements MiddlewareInterface
     }
 
     /**
- * 处理请求
- *
- * @param RequestInterface $request 请求对象
- * @param Context $context 请求上下文
- * @param callable $next 下一个中间件
- * @return ResponseInterface 响应对象
- */
-public function process(RequestInterface $request, Context $context, callable $next): ResponseInterface
-{
-    $retryCount = 0;
-    $backoff = $this->initialBackoff;
+     * 处理请求
+     *
+     * @param RequestInterface $request PSR-7 请求对象
+     * @param callable $next 下一个处理器
+     * @return ResponseInterface PSR-7 响应对象
+     */
+    public function process(RequestInterface $request, callable $next): ResponseInterface
+    {
+        $retryCount = 0;
+        $backoff = $this->initialBackoff;
 
-    while (true) {
-        try {
-            return $next($request, $context);
-        } catch (NetworkException $e) {
-            // 检查是否达到最大重试次数
-            if ($retryCount >= $this->maxRetries) {
-                throw $e;
-            }
+        while (true) {
+            try {
+                return $next($request);
+            } catch (\Throwable $e) {
+                $retryCount++;
 
-            // 增加重试计数
-            $retryCount++;
+                if ($retryCount > $this->maxRetries) {
+                    throw $e;
+                }
 
-            // 计算退避时间（添加随机抖动）
-                $jitter = mt_rand(0, (int)($backoff * 0.1));
+                $jitter = random_int(0, (int) ($backoff * 0.1));
                 $delay = $backoff + $jitter;
 
-                // 等待退避时间
-                usleep((int)($delay * 1000));
+                usleep((int) ($delay * 1000));
 
-            // 增加下次退避时间
-            $backoff *= $this->backoffMultiplier;
-        } catch (\Exception $e) {
-            // 检查是否达到最大重试次数
-            if ($retryCount >= $this->maxRetries) {
-                throw $e;
+                $backoff = (int) ($backoff * $this->backoffMultiplier);
+
+                Context::setRetryCount($retryCount);
             }
-
-            // 增加重试计数
-            $retryCount++;
-
-            // 计算退避时间（添加随机抖动）
-            $jitter = mt_rand(0, (int)($backoff * 0.1));
-            $delay = $backoff + $jitter;
-
-            // 等待退避时间
-            usleep((int)($delay * 1000));
-
-            // 增加下次退避时间
-            $backoff *= $this->backoffMultiplier;
         }
     }
-}
 }

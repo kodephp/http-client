@@ -9,13 +9,20 @@ use Psr\Http\Message\RequestInterface;
 
 /**
  * 请求异常
+ *
+ * 当请求格式错误或无法处理时抛出此异常
+ * 遵循 PSR-18 规范
+ *
+ * @package Kode\HttpClient\Exception
+ * @author  Kode Team <382601296@qq.com>
+ * @license Apache-2.0
  */
-class RequestException extends HttpException implements RequestExceptionInterface
+final class RequestException extends HttpException implements RequestExceptionInterface
 {
     /**
-     * @var RequestInterface 请求对象
+     * 请求对象
      */
-    private RequestInterface $request;
+    private readonly RequestInterface $request;
 
     /**
      * 构造函数
@@ -28,6 +35,7 @@ class RequestException extends HttpException implements RequestExceptionInterfac
     {
         parent::__construct($message, 0, $previous);
         $this->request = $request;
+        $this->requestUri = (string) $request->getUri();
     }
 
     /**

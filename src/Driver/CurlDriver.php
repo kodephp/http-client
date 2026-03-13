@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Kode\HttpClient\Driver;
 
-use Kode\Context\Context;
+use Kode\HttpClient\Context\Context;
 use Kode\HttpClient\Exception\NetworkException;
 use Kode\HttpClient\Exception\RequestException;
 use Psr\Http\Message\RequestInterface;
@@ -15,107 +15,188 @@ use GuzzleHttp\Psr7\Response;
  * Curl HTTP 驱动
  *
  * 基于 PHP curl 扩展实现的同步 HTTP 驱动
+ * 支持 PHP 8.1+ 并兼容 PHP 8.5 新特性
+ *
+ * @package Kode\HttpClient\Driver
+ * @author  Kode Team <382601296@qq.com>
+ * @license Apache-2.0
  */
-class CurlDriver implements DriverInterface
+final class CurlDriver implements DriverInterface
 {
+    /**
+     * 默认超时时间（秒）
+     */
+    private const DEFAULT_TIMEOUT = 30;
+
+    /**
+     * 默认连接超时时间（秒）
+     */
+    private const DEFAULT_CONNECT_TIMEOUT = 10;
+
+    /**
+     * 默认请求头
+     */
+    private const DEFAULT_HEADERS = [
+        'Accept' => '*/*',
+        'User-Agent' => 'KodeHttpClient/2.0',
+    ];
+
     /**
      * 发送 HTTP 请求
      *
      * @param RequestInterface $request PSR-7 请求对象
-     * @param Context $context 请求上下文
      * @return ResponseInterface PSR-7 响应对象
      *
      * @throws NetworkException 当发生网络错误时抛出
      * @throws RequestException 当请求格式错误时抛出
      */
-    public function sendRequest(RequestInterface $request, Context $context): ResponseInterface
+    public function sendRequest(RequestInterface $request): ResponseInterface
     {
-        // 检查 curl 扩展是否可用
         if (!extension_loaded('curl')) {
-            throw new NetworkException('cURL extension is not loaded', $request);
+            throw new NetworkException('cURL 扩展未加载', $request);
         }
 
-        // 初始化 curl 句柄
         $ch = curl_init();
-        
+
         if ($ch === false) {
-            throw new NetworkException('Failed to initialize cURL session', $request);
+            throw new NetworkException('无法初始化 cURL 会话', $request);
         }
 
         try {
-            // 设置请求 URL
-            curl_setopt($ch, CURLOPT_URL, (string) $request->getUri());
-            
-            // 设置请求方法
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $request->getMethod());
-            
-            // 设置请求头
-            $headers = [];
-            foreach ($request->getHeaders() as $name => $values) {
-                foreach ($values as $value) {
-                    $headers[] = $name . ': ' . $value;
-                }
-            }
-            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-            
-            // 设置请求体
-            $body = (string) $request->getBody();
-            if ($body !== '') {
-                curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-            }
-            
-            // 设置返回响应而不是直接输出
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            
-            // 设置返回响应头
-            curl_setopt($ch, CURLOPT_HEADER, true);
-            
-            // 设置超时
-            $timeout = $context->getTimeout();
-            if ($timeout !== null) {
-                curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
-            }
-            
-            // 执行请求
+            $this->configureCurl($ch, $request);
+
             $response = curl_exec($ch);
-            
-            // 检查是否有错误
+
             if ($response === false) {
                 $error = curl_error($ch);
-                throw new NetworkException('cURL error: ' . $error, $request);
+                $errno = curl_errno($ch);
+                throw new NetworkException(
+                    sprintf('cURL 错误 [%d]: %s', $errno, $error),
+                    $request
+                );
             }
-            
-            // 获取 HTTP 状态码
+
             $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            
-            // 获取响应头大小
             $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-            
-            // 分离响应头和响应体
+
             $responseHeaders = substr($response, 0, $headerSize);
             $responseBody = substr($response, $headerSize);
-            
-            // 解析响应头
-            $headers = [];
-            $lines = explode("\r\n", $responseHeaders);
-            foreach ($lines as $line) {
-                if (strpos($line, ':') !== false) {
-                    list($key, $value) = explode(':', $line, 2);
-                    $key = trim($key);
-                    $value = trim($value);
-                    if (!isset($headers[$key])) {
-                        $headers[$key] = [];
-                    }
-                    $headers[$key][] = $value;
-                }
-            }
-            
-            // 创建响应对象
+
+            $headers = $this->parseHeaders($responseHeaders);
+
             return new Response($statusCode, $headers, $responseBody);
-            
+
         } finally {
-            // 关闭 curl 句柄
             curl_close($ch);
         }
+    }
+
+    /**
+     * 配置 cURL 句柄
+     *
+     * @param resource $ch cURL 句柄
+     * @param RequestInterface $request PSR-7 请求对象
+     */
+    private function configureCurl($ch, RequestInterface $request): void
+    {
+        $uri = $request->getUri();
+
+        curl_setopt($ch, CURLOPT_URL, (string) $uri);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $request->getMethod());
+
+        $headers = $this->buildHeaders($request);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
+        $body = (string) $request->getBody();
+        if ($body !== '') {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+        }
+
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HEADER, true);
+
+        $timeout = Context::getTimeout() ?? self::DEFAULT_TIMEOUT;
+        curl_setopt($ch, CURLOPT_TIMEOUT, (int) $timeout);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, self::DEFAULT_CONNECT_TIMEOUT);
+
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+
+        if ($uri->getScheme() === 'https') {
+            curl_setopt($ch, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
+        }
+    }
+
+    /**
+     * 构建请求头数组
+     *
+     * @param RequestInterface $request PSR-7 请求对象
+     * @return array<int, string> 请求头数组
+     */
+    private function buildHeaders(RequestInterface $request): array
+    {
+        $headers = [];
+
+        foreach (self::DEFAULT_HEADERS as $name => $value) {
+            if (!$request->hasHeader($name)) {
+                $headers[] = $name . ': ' . $value;
+            }
+        }
+
+        foreach ($request->getHeaders() as $name => $values) {
+            if (strtolower($name) === 'host') {
+                continue;
+            }
+            foreach ($values as $value) {
+                $headers[] = $name . ': ' . $value;
+            }
+        }
+
+        $host = $request->getHeaderLine('Host');
+        if ($host === '') {
+            $uri = $request->getUri();
+            $host = $uri->getHost();
+            if ($port = $uri->getPort()) {
+                $host .= ':' . $port;
+            }
+        }
+        if ($host !== '') {
+            $headers[] = 'Host: ' . $host;
+        }
+
+        return $headers;
+    }
+
+    /**
+     * 解析响应头
+     *
+     * @param string $headerContent 响应头内容
+     * @return array<string, array<int, string>> 解析后的响应头
+     */
+    private function parseHeaders(string $headerContent): array
+    {
+        $headers = [];
+        $lines = explode("\r\n", $headerContent);
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '' || !str_contains($line, ':')) {
+                continue;
+            }
+
+            [$key, $value] = explode(':', $line, 2);
+            $key = trim($key);
+            $value = trim($value);
+
+            if (!isset($headers[$key])) {
+                $headers[$key] = [];
+            }
+            $headers[$key][] = $value;
+        }
+
+        return $headers;
     }
 }

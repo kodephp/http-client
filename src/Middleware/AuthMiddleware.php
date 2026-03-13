@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Kode\HttpClient\Middleware;
 
-use Kode\HttpClient\Context\Context;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 
@@ -12,27 +11,39 @@ use Psr\Http\Message\ResponseInterface;
  * 认证中间件
  *
  * 支持 Bearer Token 和 API Key 认证方式
+ * 自动为请求添加认证头部
+ *
+ * @package Kode\HttpClient\Middleware
+ * @author  Kode Team <382601296@qq.com>
+ * @license Apache-2.0
  */
-class AuthMiddleware implements MiddlewareInterface
+final class AuthMiddleware implements MiddlewareInterface
 {
+    /**
+     * Bearer Token 认证类型
+     */
     public const TYPE_BEARER = 'bearer';
+
+    /**
+     * API Key 认证类型
+     */
     public const TYPE_API_KEY = 'api_key';
-    
+
     /**
-     * @var string 认证类型
+     * 认证类型
      */
-    private string $type;
-    
+    private readonly string $type;
+
     /**
-     * @var string 认证凭证
+     * 认证凭证
      */
-    private string $credential;
-    
+    private readonly string $credential;
+
     /**
-     * @var string API Key 的头部名称（仅在 API Key 认证时使用）
+     * API Key 的头部名称
      */
-    private string $apiKeyHeader;
-    
+    private readonly string $apiKeyHeader;
+
     /**
      * 构造函数
      *
@@ -46,52 +57,42 @@ class AuthMiddleware implements MiddlewareInterface
         $this->credential = $credential;
         $this->apiKeyHeader = $apiKeyHeader;
     }
-    
+
     /**
      * 处理请求
      *
-     * @param RequestInterface $request 请求对象
-     * @param Context $context 请求上下文
-     * @param callable $next 下一个中间件
-     * @return ResponseInterface 响应对象
+     * @param RequestInterface $request PSR-7 请求对象
+     * @param callable $next 下一个处理器
+     * @return ResponseInterface PSR-7 响应对象
      */
-    public function process(RequestInterface $request, Context $context, callable $next): ResponseInterface
+    public function process(RequestInterface $request, callable $next): ResponseInterface
     {
-        // 根据认证类型添加相应的认证头部
-        switch ($this->type) {
-            case self::TYPE_BEARER:
-                $request = $request->withHeader('Authorization', 'Bearer ' . $this->credential);
-                break;
-                
-            case self::TYPE_API_KEY:
-                $request = $request->withHeader($this->apiKeyHeader, $this->credential);
-                break;
-                
-            default:
-                throw new \InvalidArgumentException('Unsupported authentication type: ' . $this->type);
-        }
-        
-        // 执行下一个中间件
-        return $next($request, $context);
+        $request = match ($this->type) {
+            self::TYPE_BEARER => $request->withHeader('Authorization', 'Bearer ' . $this->credential),
+            self::TYPE_API_KEY => $request->withHeader($this->apiKeyHeader, $this->credential),
+            default => throw new \InvalidArgumentException('不支持的认证类型: ' . $this->type),
+        };
+
+        return $next($request);
     }
-    
+
     /**
      * 创建 Bearer Token 认证中间件
      *
      * @param string $token Bearer Token
-     * @return self
+     * @return self 中间件实例
      */
     public static function bearer(string $token): self
     {
         return new self(self::TYPE_BEARER, $token);
     }
-    
+
     /**
      * 创建 API Key 认证中间件
      *
      * @param string $apiKey API Key
      * @param string $header API Key 的头部名称
-     * @return self
+     * @return self 中间件实例
      */
     public static function apiKey(string $apiKey, string $header = 'X-API-Key'): self
     {
