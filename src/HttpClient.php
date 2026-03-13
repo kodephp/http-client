@@ -66,6 +66,21 @@ class HttpClient implements HttpClientInterface
     }
 
     /**
+     * 发送带上下文的 HTTP 请求
+     *
+     * @param RequestInterface $request PSR-7 请求对象
+     * @param mixed $context 请求上下文（已废弃，保留向后兼容）
+     * @return ResponseInterface PSR-7 响应对象
+     *
+     * @throws HttpException 当发生网络错误或协议错误时抛出
+     * @deprecated 使用 Context::setTimeout() 等静态方法代替
+     */
+    public function sendRequestWithContext(RequestInterface $request, mixed $context = null): ResponseInterface
+    {
+        return $this->sendRequest($request);
+    }
+
+    /**
      * 获取驱动实例
      *
      * @return DriverInterface HTTP 驱动实例
