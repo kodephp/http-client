@@ -12,11 +12,12 @@
         "coroutine",
         "async",
         "middleware",
-        "php8"
+        "php8",
+        "php85"
     ],
     "homepage": "https://github.com/kodephp/http-client",
     "license": "Apache-2.0",
-    "version": "2.2.1",
+    "version": "2.3.0",
     "authors": [
         {
             "name": "Kode Team",
@@ -42,8 +43,10 @@
     "suggest": {
         "ext-swoole": "用于 Swoole 协程支持",
         "ext-swow": "用于 Swow 协程支持",
+        "ext-curl": "用于 Curl 和 Fiber 驱动",
         "amphp/http-client": "用于 Amp 异步 HTTP 客户端驱动",
-        "guzzlehttp/psr7": "用于 PSR-7 消息实现"
+        "guzzlehttp/psr7": "用于 PSR-7 消息实现",
+        "kode/fibers": "用于 Fiber 协程池和调度器"
     },
     "autoload": {
         "psr-4": {
@@ -58,7 +61,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "2.2.x-dev"
+            "dev-main": "2.3.x-dev"
         }
     },
     "config": {

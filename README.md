@@ -10,6 +10,7 @@
 - ✅ **上下文管理** - 使用 `kode/context` 进行请求上下文传递
 - ✅ **中间件机制** - 内置重试、超时、日志、认证、限流、缓存等中间件
 - ✅ **PHP 8.1+ 支持** - 兼容 PHP 8.5 新特性
+- ✅ **Fiber 支持** - 原生 Fiber 驱动，支持 kode/fibers 包集成
 - ✅ **类型安全** - 完整的类型声明和静态分析支持
 
 ## 安装
@@ -26,7 +27,7 @@ composer require kode/http-client
 use Kode\HttpClient\Factory;
 use GuzzleHttp\Psr7\Request;
 
-// 创建客户端
+// 创建客户端（自动选择最优驱动）
 $client = Factory::create();
 
 // 创建请求
@@ -39,6 +40,23 @@ echo $response->getStatusCode(); // 200
 echo $response->getBody();       // 响应内容
 ```
 
+### 使用 Fiber 驱动
+
+```php
+use Kode\HttpClient\Factory;
+
+// 创建 Fiber 驱动的客户端
+$client = Factory::createFiber([
+    'timeout' => 10.0,
+    'retries' => 3,
+]);
+
+// 或指定驱动类型
+$client = Factory::create([
+    'driver' => Factory::DRIVER_FIBER,
+]);
+```
+
 ### 使用配置选项
 
 ```php
@@ -46,6 +64,7 @@ use Kode\HttpClient\Factory;
 
 // 创建带配置的客户端
 $client = Factory::create([
+    'driver' => 'fiber',   // 驱动类型（auto|curl|swoole|amp|fiber）
     'timeout' => 10.0,     // 默认超时时间（秒）
     'retries' => 3,        // 最大重试次数
     'logger' => function (string $message) {
@@ -65,6 +84,45 @@ $client = Factory::create([
 // 发送请求
 $request = new \GuzzleHttp\Psr7\Request('GET', 'https://httpbin.org/get');
 $response = $client->sendRequest($request);
+```
+
+## 驱动支持
+
+| 运行环境 | 推荐驱动 | 说明 |
+|---------|----------|------|
+| Fiber 环境 | `FiberDriver` | PHP 8.1+ 原生 Fiber 支持，自动协程切换 |
+| Swoole 协程 | `SwooleDriver` | 高性能、原生协程支持 |
+| Amp 环境 | `AmpDriver` | 基于事件循环的异步实现 |
+| 默认环境 | `CurlDriver` | 基于 curl 扩展的同步实现 |
+
+### 驱动选择优先级
+
+自动模式下，驱动选择优先级为：
+
+1. **SwooleDriver** - 如果在 Swoole 协程环境中
+2. **FiberDriver** - 如果 PHP 8.1+ 且 curl 扩展可用
+3. **AmpDriver** - 如果 Amp HTTP 客户端可用
+4. **CurlDriver** - 默认回退
+
+### 手动选择驱动
+
+```php
+use Kode\HttpClient\Factory;
+use Kode\HttpClient\HttpClient;
+use Kode\HttpClient\Driver\CurlDriver;
+use Kode\HttpClient\Driver\FiberDriver;
+use Kode\HttpClient\Driver\SwooleDriver;
+
+// 方式一：通过工厂配置
+$client = Factory::create(['driver' => Factory::DRIVER_FIBER]);
+
+// 方式二：使用工厂快捷方法
+$client = Factory::createFiber();
+$client = Factory::createSwoole();
+$client = Factory::createAmp();
+
+// 方式三：手动实例化
+$client = new HttpClient(new FiberDriver());
 ```
 
 ## 中间件
@@ -193,26 +251,24 @@ $requestId = Context::initialize([
 Context::clear();
 ```
 
-## 驱动支持
+## 与 kode/fibers 集成
 
-| 运行环境 | 推荐驱动 | 说明 |
-|---------|----------|------|
-| Swoole 协程 | `SwooleDriver` | 高性能、原生协程支持 |
-| Amp 环境 | `AmpDriver` | 基于事件循环的异步实现 |
-| 默认环境 | `CurlDriver` | 基于 curl 扩展的同步实现 |
-
-### 手动选择驱动
+本包支持与 `kode/fibers` 包无缝集成：
 
 ```php
-use Kode\HttpClient\HttpClient;
-use Kode\HttpClient\Driver\CurlDriver;
-use Kode\HttpClient\Driver\SwooleDriver;
+use Kode\Fibers\Fibers;
+use Kode\HttpClient\Factory;
+use GuzzleHttp\Psr7\Request;
 
-// 使用 Curl 驱动
-$client = new HttpClient(new CurlDriver());
-
-// 使用 Swoole 驱动（需在协程环境中）
-$client = new HttpClient(new SwooleDriver());
+// 在 Fiber 池中并发发送请求
+$results = Fibers::batch(
+    ['https://httpbin.org/get', 'https://httpbin.org/post'],
+    fn(string $url) => Factory::createFiber()
+        ->sendRequest(new Request('GET', $url))
+        ->getBody()
+        ->getContents(),
+    2 // 并发数
+);
 ```
 
 ## 异常处理
@@ -245,6 +301,7 @@ src/
 ├── Driver/
 │   ├── DriverInterface.php  # 驱动接口
 │   ├── CurlDriver.php       # Curl 驱动
+│   ├── FiberDriver.php      # Fiber 驱动（PHP 8.1+）
 │   ├── SwooleDriver.php     # Swoole 驱动
 │   └── AmpDriver.php        # Amp 驱动
 ├── Exception/
@@ -281,7 +338,7 @@ composer test-coverage
 ## 要求
 
 - PHP >= 8.1
-- ext-curl（CurlDriver 需要）
+- ext-curl（CurlDriver 和 FiberDriver 需要）
 - kode/context ^2.1
 - psr/http-message ^1.0|^2.0
 - psr/http-client ^1.0
@@ -291,6 +348,8 @@ composer test-coverage
 - ext-swoole - Swoole 协程支持
 - ext-swow - Swow 协程支持
 - amphp/http-client - Amp 异步 HTTP 客户端
+- kode/fibers - Fiber 协程池和调度器
+- guzzlehttp/psr7 - PSR-7 消息实现
 
 ## 许可证
 
