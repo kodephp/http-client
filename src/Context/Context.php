@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Kode\HttpClient\Context;
 
 use Kode\Context\Context as BaseContext;
+use Kode\HttpClient\Config\TransportOptions;
 
 /**
  * HTTP 客户端上下文辅助类
@@ -21,22 +22,27 @@ final class Context
     /**
      * 超时时间键名
      */
-    public const TIMEOUT_KEY = 'http_timeout';
+    public const string TIMEOUT_KEY = 'http_timeout';
 
     /**
      * 重试次数键名
      */
-    public const RETRY_KEY = 'http_retry_count';
+    public const string RETRY_KEY = 'http_retry_count';
 
     /**
      * 请求开始时间键名
      */
-    public const START_TIME_KEY = 'http_start_time';
+    public const string START_TIME_KEY = 'http_start_time';
 
     /**
      * 请求 ID 键名
      */
-    public const REQUEST_ID_KEY = 'http_request_id';
+    public const string REQUEST_ID_KEY = 'http_request_id';
+
+    /**
+     * 传输层配置键名
+     */
+    public const string TRANSPORT_KEY = 'http_transport_options';
 
     /**
      * 私有构造函数，防止实例化
@@ -140,6 +146,63 @@ final class Context
     }
 
     /**
+     * 获取上下文中原始存储的传输层配置
+     *
+     * @return TransportOptions|null 未设置时返回 null
+     */
+    public static function rawTransportOptions(): ?TransportOptions
+    {
+        $options = BaseContext::get(self::TRANSPORT_KEY);
+
+        return $options instanceof TransportOptions ? $options : null;
+    }
+
+    /**
+     * 获取生效的传输层配置
+     *
+     * 未显式设置时返回默认配置，并让上下文中的超时值生效。
+     *
+     * @return TransportOptions 传输层配置
+     */
+    public static function getTransportOptions(): TransportOptions
+    {
+        $options = self::rawTransportOptions();
+
+        if ($options !== null) {
+            return $options;
+        }
+
+        $timeout = self::getTimeout();
+
+        return $timeout !== null
+            ? new TransportOptions(timeout: $timeout)
+            : new TransportOptions();
+    }
+
+    /**
+     * 设置传输层配置
+     *
+     * @param TransportOptions|null $options 传输层配置，传入 null 表示清除
+     */
+    public static function setTransportOptions(?TransportOptions $options): void
+    {
+        if ($options === null) {
+            BaseContext::delete(self::TRANSPORT_KEY);
+            return;
+        }
+
+        BaseContext::set(self::TRANSPORT_KEY, $options);
+    }
+
+    /**
+     * 清除超时配置
+     */
+    public static function clearTimeout(): void
+    {
+        BaseContext::delete(self::TIMEOUT_KEY);
+    }
+
+    /**
      * 初始化 HTTP 上下文
      *
      * @param array<string, mixed> $options 配置选项
@@ -153,6 +216,15 @@ final class Context
 
         if (isset($options['retry_count'])) {
             self::setRetryCount((int) $options['retry_count']);
+        }
+
+        if (isset($options['transport'])) {
+            $transport = $options['transport'];
+            self::setTransportOptions(
+                $transport instanceof TransportOptions
+                    ? $transport
+                    : TransportOptions::fromArray((array) $transport)
+            );
         }
 
         self::setStartTime(microtime(true));
@@ -172,6 +244,7 @@ final class Context
         BaseContext::delete(self::RETRY_KEY);
         BaseContext::delete(self::START_TIME_KEY);
         BaseContext::delete(self::REQUEST_ID_KEY);
+        BaseContext::delete(self::TRANSPORT_KEY);
     }
 
     /**
@@ -201,6 +274,7 @@ final class Context
             self::RETRY_KEY,
             self::START_TIME_KEY,
             self::REQUEST_ID_KEY,
+            self::TRANSPORT_KEY,
         ]);
     }
 

@@ -7,9 +7,12 @@ runtime
 .lock
 .DS_Store
 .trae
+.workbuddy/
 */.cursor
 404.html
 thumbs.db
 vendor/
 composer.lock
 .phpunit.cache
+coverage/
+CHANGELOG.md

@@ -5,19 +5,21 @@
         "http",
         "client",
         "psr-18",
+        "psr-17",
         "psr-7",
         "swoole",
         "swow",
         "fiber",
         "coroutine",
         "async",
+        "concurrent",
         "middleware",
-        "php8",
-        "php85"
+        "php83",
+        "php84"
     ],
     "homepage": "https://github.com/kodephp/http-client",
     "license": "Apache-2.0",
-    "version": "2.3.0",
+    "version": "2.4.0",
     "authors": [
         {
             "name": "Kode Team",
@@ -29,29 +31,32 @@
         "source": "https://github.com/kodephp/http-client"
     },
     "require": {
-        "php": "^8.1",
+        "php": "^8.3",
+        "ext-json": "*",
         "kode/context": "^2.1",
-        "psr/http-message": "^1.0|^2.0",
-        "psr/http-client": "^1.0"
+        "psr/http-client": "^1.0",
+        "psr/http-factory": "^1.0",
+        "psr/http-message": "^2.0"
     },
     "require-dev": {
-        "phpunit/phpunit": "^10.0|^11.0|^12.0",
-        "amphp/http-client": "^4.0",
-        "amphp/socket": "^1.0",
-        "guzzlehttp/psr7": "^2.1"
+        "amphp/http-client": "^4.0|^5.0",
+        "amphp/socket": "^1.0|^2.0",
+        "guzzlehttp/psr7": "^2.6",
+        "phpunit/phpunit": "^11.0|^12.0"
     },
     "suggest": {
-        "ext-swoole": "用于 Swoole 协程支持",
-        "ext-swow": "用于 Swow 协程支持",
-        "ext-curl": "用于 Curl 和 Fiber 驱动",
+        "ext-swoole": "用于 Swoole 协程驱动",
+        "ext-swow": "用于 Swow 协程驱动",
+        "ext-curl": "用于 Curl / Fiber 驱动及并发请求",
         "amphp/http-client": "用于 Amp 异步 HTTP 客户端驱动",
-        "guzzlehttp/psr7": "用于 PSR-7 消息实现",
+        "guzzlehttp/psr7": "PSR-7/PSR-17 消息实现（默认推荐）",
+        "nyholm/psr7": "轻量级 PSR-7/PSR-17 消息实现",
+        "psr/log": "用于 LoggingMiddleware 的 PSR-3 日志集成",
         "kode/fibers": "用于 Fiber 协程池和调度器"
     },
     "autoload": {
         "psr-4": {
-            "Kode\\HttpClient\\": "src/",
-            "Kode\\HttpClient\\Context\\": "src/Context/"
+            "Kode\\HttpClient\\": "src/"
         }
     },
     "autoload-dev": {
@@ -61,7 +66,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "2.3.x-dev"
+            "dev-main": "2.4.x-dev"
         }
     },
     "config": {
@@ -71,7 +76,6 @@
     "prefer-stable": true,
     "scripts": {
         "test": "phpunit",
-        "test-coverage": "phpunit --coverage-html coverage",
-        "test-middlewares": "phpunit tests/MiddlewareTest.php"
+        "test-coverage": "phpunit --coverage-html coverage"
     }
 }

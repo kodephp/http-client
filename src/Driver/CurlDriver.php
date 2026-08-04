@@ -4,42 +4,60 @@ declare(strict_types=1);
 
 namespace Kode\HttpClient\Driver;
 
+use Kode\HttpClient\Config\TransportOptions;
 use Kode\HttpClient\Context\Context;
+use Kode\HttpClient\Driver\Internal\CurlHandleFactory;
+use Kode\HttpClient\Driver\Internal\HeaderCollector;
 use Kode\HttpClient\Exception\NetworkException;
-use Kode\HttpClient\Exception\RequestException;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
-use GuzzleHttp\Psr7\Response;
 
 /**
  * Curl HTTP 驱动
  *
- * 基于 PHP curl 扩展实现的同步 HTTP 驱动
- * 支持 PHP 8.1+ 并兼容 PHP 8.5 新特性
+ * 基于 PHP curl 扩展的同步驱动，是 FPM / CLI 环境下的默认选择。
+ *
+ * v2.4 改进：
+ *  - 使用 CURLOPT_HEADERFUNCTION 精确捕获「最后一跳」响应头，修复重定向场景头部串味问题
+ *  - HEAD 请求改用 CURLOPT_NOBODY，避免挂起等待不存在的响应体
+ *  - 超时精度提升到毫秒（CURLOPT_TIMEOUT_MS / CURLOPT_CONNECTTIMEOUT_MS）
+ *  - 保留响应状态短语与协议版本
+ *  - 支持 gzip/deflate/br 自动解压、代理、TLS 校验策略、自定义 curl 选项
+ *  - 通过 curl_multi 提供真正的并发请求能力
  *
  * @package Kode\HttpClient\Driver
  * @author  Kode Team <382601296@qq.com>
  * @license Apache-2.0
  */
-final class CurlDriver implements DriverInterface
+final class CurlDriver implements ConcurrentDriverInterface
 {
     /**
-     * 默认超时时间（秒）
+     * 驱动标识，用于 User-Agent 后缀
      */
-    private const DEFAULT_TIMEOUT = 30;
+    private const string DRIVER_TAG = 'curl';
 
     /**
-     * 默认连接超时时间（秒）
+     * 默认传输配置
      */
-    private const DEFAULT_CONNECT_TIMEOUT = 10;
+    private readonly ?TransportOptions $defaults;
 
     /**
-     * 默认请求头
+     * 构造函数
+     *
+     * @param TransportOptions|null $defaults 驱动级默认传输配置，null 表示完全依赖上下文
      */
-    private const DEFAULT_HEADERS = [
-        'Accept' => '*/*',
-        'User-Agent' => 'KodeHttpClient/2.0',
-    ];
+    public function __construct(?TransportOptions $defaults = null)
+    {
+        $this->defaults = $defaults;
+    }
+
+    /**
+     * 当前环境是否可用
+     */
+    public static function isSupported(): bool
+    {
+        return extension_loaded('curl');
+    }
 
     /**
      * 发送 HTTP 请求
@@ -48,155 +66,176 @@ final class CurlDriver implements DriverInterface
      * @return ResponseInterface PSR-7 响应对象
      *
      * @throws NetworkException 当发生网络错误时抛出
-     * @throws RequestException 当请求格式错误时抛出
      */
+    #[\Override]
     public function sendRequest(RequestInterface $request): ResponseInterface
+    {
+        $this->assertCurlAvailable($request);
+
+        $options = $this->resolveOptions();
+        $collector = new HeaderCollector();
+        $handle = CurlHandleFactory::create($request, $options, $collector, self::DRIVER_TAG);
+
+        try {
+            $body = curl_exec($handle);
+
+            if ($body === false) {
+                throw CurlHandleFactory::toException(
+                    curl_errno($handle),
+                    curl_error($handle),
+                    $request,
+                    $options
+                );
+            }
+
+            return CurlHandleFactory::buildResponse($handle, $collector, (string) $body);
+        } finally {
+            curl_close($handle);
+        }
+    }
+
+    /**
+     * 并发发送多个 HTTP 请求
+     *
+     * 使用 curl_multi 在单线程内并行执行，整体耗时接近最慢的那个请求。
+     *
+     * @param array<array-key, RequestInterface> $requests 请求集合
+     * @return array<array-key, ResponseInterface|\Throwable> 结果集合，键与入参一致
+     */
+    #[\Override]
+    public function sendConcurrent(array $requests): array
+    {
+        if ($requests === []) {
+            return [];
+        }
+
+        $first = reset($requests);
+        if ($first instanceof RequestInterface) {
+            $this->assertCurlAvailable($first);
+        }
+
+        $options = $this->resolveOptions();
+        $multi = curl_multi_init();
+
+        /** @var array<int, array{key: array-key, request: RequestInterface, handle: \CurlHandle, collector: HeaderCollector}> $registry */
+        $registry = [];
+        $results = [];
+
+        try {
+            foreach ($requests as $key => $request) {
+                if (!$request instanceof RequestInterface) {
+                    $results[$key] = new \InvalidArgumentException('并发请求集合中存在非 PSR-7 请求对象');
+                    continue;
+                }
+
+                $collector = new HeaderCollector();
+                $handle = CurlHandleFactory::create($request, $options, $collector, self::DRIVER_TAG);
+
+                curl_multi_add_handle($multi, $handle);
+                $registry[spl_object_id($handle)] = [
+                    'key' => $key,
+                    'request' => $request,
+                    'handle' => $handle,
+                    'collector' => $collector,
+                ];
+            }
+
+            $this->runMulti($multi);
+
+            foreach ($registry as $entry) {
+                $handle = $entry['handle'];
+                $errno = curl_errno($handle);
+
+                if ($errno !== 0) {
+                    $results[$entry['key']] = CurlHandleFactory::toException(
+                        $errno,
+                        curl_error($handle),
+                        $entry['request'],
+                        $options
+                    );
+                    continue;
+                }
+
+                $body = curl_multi_getcontent($handle);
+                $results[$entry['key']] = CurlHandleFactory::buildResponse(
+                    $handle,
+                    $entry['collector'],
+                    (string) $body
+                );
+            }
+        } finally {
+            foreach ($registry as $entry) {
+                curl_multi_remove_handle($multi, $entry['handle']);
+                curl_close($entry['handle']);
+            }
+            curl_multi_close($multi);
+        }
+
+        // 保持与入参一致的顺序
+        $ordered = [];
+        foreach ($requests as $key => $_) {
+            if (array_key_exists($key, $results)) {
+                $ordered[$key] = $results[$key];
+            }
+        }
+
+        return $ordered;
+    }
+
+    /**
+     * 驱动执行 curl_multi 事件循环直至全部完成
+     *
+     * @param \CurlMultiHandle $multi curl_multi 句柄
+     */
+    private function runMulti(\CurlMultiHandle $multi): void
+    {
+        $running = 0;
+
+        do {
+            $status = curl_multi_exec($multi, $running);
+
+            if ($running > 0) {
+                // 返回 -1 表示无文件描述符可等待，退避 1ms 避免空转打满 CPU
+                if (curl_multi_select($multi, 0.5) === -1) {
+                    usleep(1000);
+                }
+            }
+
+            while (curl_multi_info_read($multi) !== false) {
+                // 逐条消费完成通知，防止内部队列堆积
+            }
+        } while ($running > 0 && $status === CURLM_OK);
+    }
+
+    /**
+     * 解析本次请求实际生效的传输配置
+     */
+    private function resolveOptions(): TransportOptions
+    {
+        $contextOptions = Context::getTransportOptions();
+
+        if ($this->defaults === null) {
+            return $contextOptions;
+        }
+
+        $timeout = Context::getTimeout();
+
+        return $timeout !== null
+            ? $this->defaults->with(['timeout' => $timeout])
+            : $this->defaults;
+    }
+
+    /**
+     * 校验 curl 扩展可用性
+     *
+     * @param RequestInterface $request PSR-7 请求对象
+     *
+     * @throws NetworkException 当 curl 扩展未加载时抛出
+     */
+    private function assertCurlAvailable(RequestInterface $request): void
     {
         if (!extension_loaded('curl')) {
             throw new NetworkException('cURL 扩展未加载', $request);
         }
-
-        $ch = curl_init();
-
-        if ($ch === false) {
-            throw new NetworkException('无法初始化 cURL 会话', $request);
-        }
-
-        try {
-            $this->configureCurl($ch, $request);
-
-            $response = curl_exec($ch);
-
-            if ($response === false) {
-                $error = curl_error($ch);
-                $errno = curl_errno($ch);
-                throw new NetworkException(
-                    sprintf('cURL 错误 [%d]: %s', $errno, $error),
-                    $request
-                );
-            }
-
-            $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-
-            $responseHeaders = substr($response, 0, $headerSize);
-            $responseBody = substr($response, $headerSize);
-
-            $headers = $this->parseHeaders($responseHeaders);
-
-            return new Response($statusCode, $headers, $responseBody);
-
-        } finally {
-            curl_close($ch);
-        }
-    }
-
-    /**
-     * 配置 cURL 句柄
-     *
-     * @param resource $ch cURL 句柄
-     * @param RequestInterface $request PSR-7 请求对象
-     */
-    private function configureCurl($ch, RequestInterface $request): void
-    {
-        $uri = $request->getUri();
-
-        curl_setopt($ch, CURLOPT_URL, (string) $uri);
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $request->getMethod());
-
-        $headers = $this->buildHeaders($request);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-
-        $body = (string) $request->getBody();
-        if ($body !== '') {
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-        }
-
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HEADER, true);
-
-        $timeout = Context::getTimeout() ?? self::DEFAULT_TIMEOUT;
-        curl_setopt($ch, CURLOPT_TIMEOUT, (int) $timeout);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, self::DEFAULT_CONNECT_TIMEOUT);
-
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
-
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
-
-        if ($uri->getScheme() === 'https') {
-            curl_setopt($ch, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
-        }
-    }
-
-    /**
-     * 构建请求头数组
-     *
-     * @param RequestInterface $request PSR-7 请求对象
-     * @return array<int, string> 请求头数组
-     */
-    private function buildHeaders(RequestInterface $request): array
-    {
-        $headers = [];
-
-        foreach (self::DEFAULT_HEADERS as $name => $value) {
-            if (!$request->hasHeader($name)) {
-                $headers[] = $name . ': ' . $value;
-            }
-        }
-
-        foreach ($request->getHeaders() as $name => $values) {
-            if (strtolower($name) === 'host') {
-                continue;
-            }
-            foreach ($values as $value) {
-                $headers[] = $name . ': ' . $value;
-            }
-        }
-
-        $host = $request->getHeaderLine('Host');
-        if ($host === '') {
-            $uri = $request->getUri();
-            $host = $uri->getHost();
-            if ($port = $uri->getPort()) {
-                $host .= ':' . $port;
-            }
-        }
-        if ($host !== '') {
-            $headers[] = 'Host: ' . $host;
-        }
-
-        return $headers;
-    }
-
-    /**
-     * 解析响应头
-     *
-     * @param string $headerContent 响应头内容
-     * @return array<string, array<int, string>> 解析后的响应头
-     */
-    private function parseHeaders(string $headerContent): array
-    {
-        $headers = [];
-        $lines = explode("\r\n", $headerContent);
-
-        foreach ($lines as $line) {
-            $line = trim($line);
-            if ($line === '' || !str_contains($line, ':')) {
-                continue;
-            }
-
-            [$key, $value] = explode(':', $line, 2);
-            $key = trim($key);
-            $value = trim($value);
-
-            if (!isset($headers[$key])) {
-                $headers[$key] = [];
-            }
-            $headers[$key][] = $value;
-        }
-
-        return $headers;
     }
 }
