@@ -363,6 +363,23 @@ src/
 └── HttpClientInterface.php  # HTTP 客户端接口
 ```
 
+## 示例
+
+`example/` 下提供了可直接运行的示例：
+
+| 文件 | 说明 | 联网 |
+|------|------|------|
+| `example/quickstart.php` | 基础用法：GET/POST、JSON/表单、base_uri、单次超时 | 需要 |
+| `example/middleware.php` | 中间件装配、自定义中间件、各中间件运行时状态 | 不需要 |
+| `example/concurrent.php` | `sendConcurrent()` / `pool()` 的「全部落定」语义 | 不需要 |
+| `example/tracing.php` | 链路追踪头注入与安全降级 | 不需要 |
+
+```bash
+php example/middleware.php
+```
+
+不联网的示例使用桩驱动（实现 `DriverInterface`），结果确定，也是单元测试的惯用写法。
+
 ## 测试
 
 ```bash
