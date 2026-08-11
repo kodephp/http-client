@@ -9,7 +9,7 @@
 - ✅ **PSR-7/PSR-18 兼容** - 完全遵循 PSR 标准
 - ✅ **上下文管理** - 使用 `kode/context` 进行请求上下文传递
 - ✅ **中间件机制** - 内置重试、超时、日志、认证、限流、缓存等中间件
-- ✅ **PHP 8.1+ 支持** - 兼容 PHP 8.5 新特性
+- ✅ **PHP 8.3+ 支持** - 兼容 PHP 8.4 / 8.5 新特性
 - ✅ **Fiber 支持** - 原生 Fiber 驱动，支持 kode/fibers 包集成
 - ✅ **类型安全** - 完整的类型声明和静态分析支持
 
@@ -78,7 +78,8 @@ $client = Factory::create([
         'capacity' => 10,
         'rate' => 1
     ],
-    'cache' => true        // 启用缓存
+    'cache' => true,       // 启用缓存
+    'trace' => true        // 链路追踪：自动注入 traceparent / X-Context-* 头
 ]);
 
 // 发送请求
@@ -90,7 +91,7 @@ $response = $client->sendRequest($request);
 
 | 运行环境 | 推荐驱动 | 说明 |
 |---------|----------|------|
-| Fiber 环境 | `FiberDriver` | PHP 8.1+ 原生 Fiber 支持，自动协程切换 |
+| Fiber 环境 | `FiberDriver` | PHP 8.3+ 原生 Fiber 支持，自动协程切换 |
 | Swoole 协程 | `SwooleDriver` | 高性能、原生协程支持 |
 | Amp 环境 | `AmpDriver` | 基于事件循环的异步实现 |
 | 默认环境 | `CurlDriver` | 基于 curl 扩展的同步实现 |
@@ -100,7 +101,7 @@ $response = $client->sendRequest($request);
 自动模式下，驱动选择优先级为：
 
 1. **SwooleDriver** - 如果在 Swoole 协程环境中
-2. **FiberDriver** - 如果 PHP 8.1+ 且 curl 扩展可用
+2. **FiberDriver** - 如果 PHP 8.3+ 且 curl 扩展可用
 3. **AmpDriver** - 如果 Amp HTTP 客户端可用
 4. **CurlDriver** - 默认回退
 
@@ -222,6 +223,36 @@ $middleware = new LoggingMiddleware(function (string $message) {
 });
 ```
 
+### 链路追踪中间件
+
+基于 `kode/context` 3.x 的 `toHeaders()` / `fromHeaders()`，自动把当前链路上下文
+（W3C `traceparent` / `tracestate` 以及 `X-Context-*` 私有头）注入出站请求，
+打通跨服务全链路追踪：
+
+```php
+use Kode\HttpClient\Middleware\TracingMiddleware;
+
+// 仅注入出站请求头
+$middleware = new TracingMiddleware();
+
+// 同时把下游响应里的 X-Context-* 上下文回写到当前上下文
+$middleware = new TracingMiddleware(propagateResponse: true);
+```
+
+开启链路追踪需在请求前调用 `Kode\Context\Context::startTrace()`（或复用已有链路）；
+未开启时仍会透传已存在的 `X-Context-*` 头（如请求 ID、关联 ID），但不会注入 W3C 头。
+可通过工厂一键启用：
+
+```php
+use Kode\HttpClient\Factory;
+
+// 注入出站链路头
+$client = Factory::create(['trace' => true]);
+
+// 同时回写下游上下文
+$client = Factory::create(['trace' => ['propagate_response' => true]]);
+```
+
 ## 上下文管理
 
 使用 `kode/context` 进行上下文传递：
@@ -296,27 +327,37 @@ try {
 
 ```
 src/
+├── Config/
+│   └── TransportOptions.php        # 传输层配置
 ├── Context/
-│   └── context.php          # HTTP 上下文辅助类
+│   └── Context.php                 # HTTP 上下文辅助类
 ├── Driver/
-│   ├── DriverInterface.php  # 驱动接口
-│   ├── CurlDriver.php       # Curl 驱动
-│   ├── FiberDriver.php      # Fiber 驱动（PHP 8.1+）
-│   ├── SwooleDriver.php     # Swoole 驱动
-│   └── AmpDriver.php        # Amp 驱动
-├── Exception/
-│   ├── HttpException.php    # HTTP 异常基类
-│   ├── NetworkException.php # 网络异常
-│   └── RequestException.php # 请求异常
+│   ├── DriverInterface.php         # 驱动接口
+│   ├── ConcurrentDriverInterface.php # 并发驱动接口
+│   ├── CurlDriver.php              # Curl 驱动
+│   ├── FiberDriver.php             # Fiber 驱动
+│   ├── SwooleDriver.php            # Swoole 驱动
+│   ├── SwowDriver.php              # Swow 驱动
+│   └── AmpDriver.php               # Amp 驱动
+├── Exception/                      # 异常体系（含熔断/限流/超时等）
+├── Message/
+│   └── MessageFactory.php          # PSR-17 消息工厂
 ├── Middleware/
-│   ├── MiddlewareInterface.php   # 中间件接口
-│   ├── MiddlewareStack.php       # 中间件栈
-│   ├── AuthMiddleware.php        # 认证中间件
-│   ├── CacheMiddleware.php       # 缓存中间件
-│   ├── RateLimitMiddleware.php   # 限流中间件
-│   ├── RetryMiddleware.php       # 重试中间件
-│   ├── TimeoutMiddleware.php     # 超时中间件
-│   └── LoggingMiddleware.php     # 日志中间件
+│   ├── MiddlewareInterface.php     # 中间件接口
+│   ├── MiddlewareStack.php         # 中间件栈
+│   ├── AuthMiddleware.php          # 认证中间件
+│   ├── CacheMiddleware.php         # 缓存中间件
+│   ├── CircuitBreakerMiddleware.php # 熔断中间件
+│   ├── HeadersMiddleware.php       # 默认请求头中间件
+│   ├── LoggingMiddleware.php        # 日志中间件
+│   ├── RateLimitMiddleware.php     # 限流中间件
+│   ├── RetryMiddleware.php          # 重试中间件
+│   ├── TimeoutMiddleware.php        # 超时中间件
+│   └── TracingMiddleware.php        # 链路追踪中间件
+├── Request/
+│   └── RequestBuilder.php          # 语义化请求构建器
+├── Response/
+│   └── HttpResponse.php            # 响应装饰器（便捷方法）
 ├── Factory.php              # 客户端工厂
 ├── HttpClient.php           # HTTP 客户端实现
 └── HttpClientInterface.php  # HTTP 客户端接口
@@ -325,11 +366,8 @@ src/
 ## 测试
 
 ```bash
-# 运行所有测试
+# 运行全部测试（自动发现 tests/ 下所有 *Test.php）
 composer test
-
-# 运行中间件测试
-composer test-middlewares
 
 # 生成测试覆盖率报告
 composer test-coverage
@@ -337,10 +375,10 @@ composer test-coverage
 
 ## 要求
 
-- PHP >= 8.1
+- PHP >= 8.3
 - ext-curl（CurlDriver 和 FiberDriver 需要）
-- kode/context ^2.1
-- psr/http-message ^1.0|^2.0
+- kode/context ^3.1
+- psr/http-message ^2.0
 - psr/http-client ^1.0
 
 ## 可选依赖
@@ -353,7 +391,7 @@ composer test-coverage
 
 ## 许可证
 
-Apache-2.0
+MIT
 
 ## 作者
 

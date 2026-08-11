@@ -15,7 +15,7 @@ use Psr\Http\Message\RequestInterface;
  *
  * @package Kode\HttpClient\Exception
  * @author  Kode Team <382601296@qq.com>
- * @license Apache-2.0
+ * @license MIT
  */
 final class NetworkException extends HttpException implements NetworkExceptionInterface
 {

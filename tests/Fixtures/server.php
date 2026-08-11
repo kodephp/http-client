@@ -6,7 +6,7 @@
  * 由 PHP 内置服务器加载：php -S 127.0.0.1:<port> tests/Fixtures/server.php
  *
  * @package Kode\HttpClient\Tests\Fixtures
- * @license Apache-2.0
+ * @license MIT
  */
 
 declare(strict_types=1);

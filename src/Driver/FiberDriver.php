@@ -28,7 +28,7 @@ use Psr\Http\Message\ResponseInterface;
  *
  * @package Kode\HttpClient\Driver
  * @author  Kode Team <382601296@qq.com>
- * @license Apache-2.0
+ * @license MIT
  */
 final class FiberDriver implements ConcurrentDriverInterface
 {

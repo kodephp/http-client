@@ -13,8 +13,8 @@
          failOnRisky="true"
          failOnWarning="true">
     <testsuites>
-        <testsuite name="Middleware Test Suite">
-            <file>tests/MiddlewareTest.php</file>
+        <testsuite name="HTTP Client Test Suite">
+            <directory suffix="Test.php">tests</directory>
         </testsuite>
     </testsuites>
     <source>

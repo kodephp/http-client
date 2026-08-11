@@ -15,7 +15,7 @@ use Psr\Http\Message\ResponseInterface;
  *
  * @package Kode\HttpClient\Middleware
  * @author  Kode Team <382601296@qq.com>
- * @license Apache-2.0
+ * @license MIT
  */
 interface MiddlewareInterface
 {

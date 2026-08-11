@@ -15,7 +15,7 @@ use Kode\HttpClient\Config\TransportOptions;
  *
  * @package Kode\HttpClient\Context
  * @author  Kode Team <382601296@qq.com>
- * @license Apache-2.0
+ * @license MIT
  */
 final class Context
 {

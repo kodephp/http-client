@@ -23,6 +23,7 @@ use Kode\HttpClient\Middleware\MiddlewareStack;
 use Kode\HttpClient\Middleware\RateLimitMiddleware;
 use Kode\HttpClient\Middleware\RetryMiddleware;
 use Kode\HttpClient\Middleware\TimeoutMiddleware;
+use Kode\HttpClient\Middleware\TracingMiddleware;
 
 /**
  * HTTP 客户端工厂类
@@ -32,7 +33,7 @@ use Kode\HttpClient\Middleware\TimeoutMiddleware;
  *
  * @package Kode\HttpClient
  * @author  Kode Team <382601296@qq.com>
- * @license Apache-2.0
+ * @license MIT
  */
 final class Factory
 {
@@ -73,6 +74,7 @@ final class Factory
         'auth',
         'logger',
         'middleware',
+        'trace',
         'psr17',
     ];
 
@@ -109,6 +111,7 @@ final class Factory
      *  - auth             array   认证配置 ['type' => 'bearer', 'credential' => 'token']
      *  - logger           callable|object  日志记录器
      *  - middleware       iterable<MiddlewareInterface>  自定义中间件
+     *  - trace            bool|array  链路追踪上下文传播（基于 kode/context，详见 TracingMiddleware）
      *  - psr17            object  自定义 PSR-17 工厂
      *
      * @param array<string, mixed> $options 配置选项
@@ -336,6 +339,14 @@ final class Factory
             /** @var array<string, string> $headers */
             $headers = $options['headers'];
             $stack->add(new HeadersMiddleware($headers));
+        }
+
+        if (!empty($options['trace'])) {
+            /** @var array<string, mixed> $traceConfig */
+            $traceConfig = is_array($options['trace']) ? $options['trace'] : [];
+            $stack->add(new TracingMiddleware(
+                propagateResponse: (bool) ($traceConfig['propagate_response'] ?? false),
+            ));
         }
 
         $transport = self::createTransportOptions($options);

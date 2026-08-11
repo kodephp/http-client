@@ -26,7 +26,7 @@ use Psr\Http\Message\UriInterface;
  *
  * @package Kode\HttpClient
  * @author  Kode Team <382601296@qq.com>
- * @license Apache-2.0
+ * @license MIT
  */
 class HttpClient implements HttpClientInterface
 {

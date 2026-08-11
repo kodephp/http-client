@@ -14,7 +14,7 @@ use Psr\Http\Client\ClientExceptionInterface;
  *
  * @package Kode\HttpClient\Exception
  * @author  Kode Team <382601296@qq.com>
- * @license Apache-2.0
+ * @license MIT
  */
 final class RateLimitException extends \RuntimeException implements ClientExceptionInterface
 {

@@ -21,7 +21,7 @@ use PHPUnit\Framework\TestCase;
  *
  * @package Kode\HttpClient\Tests
  * @author  Kode Team <382601296@qq.com>
- * @license Apache-2.0
+ * @license MIT
  */
 final class HttpClientTest extends TestCase
 {
