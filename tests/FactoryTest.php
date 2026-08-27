@@ -141,11 +141,38 @@ final class FactoryTest extends TestCase
 
     public function testCreateSimpleHasNoMiddleware(): void
     {
+        // 自 2.5.1 起 createSimple 已改为 create 的别名并标记废弃，
+        // 不再是“无中间件”极简客户端；历史静默割裂已修复，重试/熔断/限流配置现在生效。
         $client = Factory::createSimple(['base_uri' => 'https://api.example.com']);
 
-        self::assertNull($client->getMiddlewareStack());
+        self::assertNotNull($client->getMiddlewareStack());
         self::assertSame('https://api.example.com', $client->getBaseUri());
-        self::assertTrue($client->supportsParallel());
+        // 由于默认会装配重试+超时中间件，supportsParallel() 为 false；外呼要重试/熔断必须用 Factory::create()
+        self::assertFalse($client->supportsParallel());
+    }
+
+    public function testCreateSimpleIsDeprecatedAliasAndMiddlewareOptionsTakeEffect(): void
+    {
+        // 验证静默割裂已修复：retry/circuit_breaker/rate_limit 不再被丢弃
+        $client = @Factory::createSimple([
+            'retries' => 2,
+            'circuit_breaker' => ['failure_threshold' => 3],
+            'rate_limit' => ['capacity' => 5, 'rate' => 5],
+            'base_uri' => 'https://api.example.com',
+        ]);
+
+        $stack = $client->getMiddlewareStack();
+        self::assertNotNull($stack);
+        // 重试 + 熔断 + 限流 + 超时（至少 4 个），且与 Factory::create 行为一致
+        self::assertGreaterThanOrEqual(4, count($stack));
+
+        $reference = Factory::create([
+            'retries' => 2,
+            'circuit_breaker' => ['failure_threshold' => 3],
+            'rate_limit' => ['capacity' => 5, 'rate' => 5],
+            'base_uri' => 'https://api.example.com',
+        ]);
+        self::assertCount(count($reference->getMiddlewareStack()), $stack);
     }
 
     public function testCreateWithMiddleware(): void

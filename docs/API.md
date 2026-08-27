@@ -1,6 +1,6 @@
 # API 文档
 
-适用版本：**2.5.0**（PHP >= 8.3）
+适用版本：**2.5.1**（PHP >= 8.3）
 
 ## 目录
 
@@ -250,7 +250,9 @@ public static function create(array $options = []): HttpClient
 ### 其他工厂方法
 
 ```php
-// 无中间件的极简客户端（仅传输层配置生效）
+// 已废弃：现为 create() 的别名，外呼要重试/熔断/限流必须用 Factory::create()
+// 历史上仅传输层配置生效，retry/circuit_breaker/rate_limit 等会被静默丢弃，现已修复为委托 create()
+#[Deprecated(since: '2.5.1')]
 public static function createSimple(array $options = []): HttpClient
 
 // 指定中间件栈
@@ -273,7 +275,9 @@ public static function assertOptions(array $options): void
 public static function availableDrivers(): array
 ```
 
-> `createSimple()` 不挂载任何中间件，因此配合并发驱动时 `supportsParallel()` 为 `true`，可获得真正的并行性能。
+> `createSimple()` 自 2.5.1 起已废弃并改为 `create()` 的别名（会构建完整的 MiddlewareStack，重试/熔断/限流等配置不再被静默丢弃）。
+> 如需最高并发性能且确定不需要任何中间件，请使用 `Factory::create(['retries' => 0])` 并自行评估 `supportsParallel()`，或通过 `Factory::createWithMiddleware()` 传入空栈。
+> 外呼要重试/熔断/限流必须用 `Factory::create()`。
 
 ---
 

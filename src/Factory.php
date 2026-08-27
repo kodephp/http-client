@@ -450,25 +450,32 @@ final class Factory
     }
 
     /**
-     * 创建简单的 HTTP 客户端（无中间件）
+     * 创建简单的 HTTP 客户端
      *
-     * @param array<string, mixed> $options 配置选项（仅传输层相关生效）
+     * 历史上该方法仅构建 TransportOptions + Driver，不构建 MiddlewareStack，
+     * 导致 {@see Factory::SUPPORTED_OPTIONS} 中声明的 retry/circuit_breaker/rate_limit/cache 等
+     * 中间件相关配置被 {@see self::assertOptions()} 放行却永不生效，形成静默割裂。
+     *
+     * 包侧修复：自 2.5.1 起本方法改为 {@see self::create()} 的别名并标记为废弃，
+     * 内部显式构建 MiddlewareStack，确保重试/熔断/限流等配置生效。
+     * 外呼要重试/熔断/限流必须用 {@see Factory::create()}，不要再使用 createSimple。
+     *
+     * @param array<string, mixed> $options 配置选项
+     *
+     * @deprecated 2.5.1 请直接使用 {@see Factory::create()}；外呼要重试/熔断/限流必须用 Factory::create
      */
     public static function createSimple(array $options = []): HttpClient
     {
-        self::assertOptions($options);
-
-        $transport = self::createTransportOptions($options);
-        $driver = self::createDriver(
-            is_string($options['driver'] ?? null) ? $options['driver'] : self::DRIVER_AUTO,
-            $transport
+        @trigger_error(
+            sprintf(
+                '%s::createSimple() 已废弃，请使用 %s::create() 代替；外呼要重试/熔断/限流必须用 Factory::create。',
+                self::class,
+                self::class
+            ),
+            E_USER_DEPRECATED
         );
 
-        return new HttpClient(
-            $driver,
-            null,
-            isset($options['base_uri']) ? (string) $options['base_uri'] : null
-        );
+        return self::create($options);
     }
 
     /**

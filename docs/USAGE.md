@@ -1,6 +1,6 @@
 # 使用指南
 
-适用版本：**2.5.0**（PHP >= 8.3）
+适用版本：**2.5.1**（PHP >= 8.3）
 
 ## 目录
 
@@ -287,7 +287,8 @@ use Kode\HttpClient\Middleware\RetryMiddleware;
 use Kode\HttpClient\Factory;
 
 // 需要一个已构造的客户端（驱动 + 已有栈）
-$base = Factory::createSimple(['timeout' => 5.0]);
+// 注意：Factory::createSimple() 自 2.5.1 起已废弃（现为 Factory::create() 别名），外呼要重试/熔断/限流必须用 Factory::create()
+$base = Factory::create(['timeout' => 5.0, 'retries' => 0]);
 
 $client = $base->withMiddleware(
     new LoggingMiddleware(fn($m, $l = 'info') => print_r($m)),
@@ -384,7 +385,8 @@ foreach ($results as $i => $result) {
 }
 ```
 
-若需要最高并发性能且不需要中间件，用 `Factory::createSimple()` 创建客户端即可满足 `supportsParallel()`。
+若需要最高并发性能且不需要中间件，用 `Factory::create(['retries' => 0])` 或 `Factory::createWithMiddleware()` 创建空栈客户端即可满足 `supportsParallel()`。
+> `Factory::createSimple()` 自 2.5.1 起已废弃，现为 `Factory::create()` 的别名；外呼要重试/熔断/限流必须用 `Factory::create()`。
 
 ---
 
