@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace Kode\HttpClient\Driver;
 
 use Kode\HttpClient\Config\TransportOptions;
-use Kode\HttpClient\Context\Context;
+use Kode\HttpClient\Driver\Internal\ResolvesTransportOptions;
+use Kode\HttpClient\Exception\HttpException;
 use Kode\HttpClient\Exception\NetworkException;
 use Kode\HttpClient\Exception\TimeoutException;
 use Kode\HttpClient\Message\MessageFactory;
@@ -29,6 +30,8 @@ use Psr\Http\Message\ResponseInterface;
  */
 final class SwooleDriver implements ConcurrentDriverInterface
 {
+    use ResolvesTransportOptions;
+
     /**
      * 驱动标识，用于 User-Agent 后缀
      */
@@ -189,7 +192,9 @@ final class SwooleDriver implements ConcurrentDriverInterface
             }
 
             return $this->createResponse($client);
-        } catch (NetworkException $e) {
+        } catch (HttpException $e) {
+            // 本驱动自己抛的 TimeoutException 与 NetworkException 平级：只放行 NetworkException
+            // 会把超时降级成网络异常，调用方按 TimeoutException 分支的容错逻辑就此失效
             throw $e;
         } catch (\Throwable $e) {
             throw new NetworkException(
@@ -292,24 +297,6 @@ final class SwooleDriver implements ConcurrentDriverInterface
             $headers,
             (string) ($client->body ?? '')
         );
-    }
-
-    /**
-     * 解析本次请求实际生效的传输配置
-     */
-    private function resolveOptions(): TransportOptions
-    {
-        $contextOptions = Context::getTransportOptions();
-
-        if ($this->defaults === null) {
-            return $contextOptions;
-        }
-
-        $timeout = Context::getTimeout();
-
-        return $timeout !== null
-            ? $this->defaults->with(['timeout' => $timeout])
-            : $this->defaults;
     }
 
     /**

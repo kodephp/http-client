@@ -87,6 +87,17 @@ final class RequestBuilderTest extends TestCase
         self::assertSame('stream-payload', (string) $request->getBody());
     }
 
+    public function testResourceBodyIsAcceptedAsDocumented(): void
+    {
+        // 文档一直写着 body 支持 resource，实现却只认字符串/标量/StreamInterface
+        $handle = fopen('php://temp', 'r+b');
+        fwrite($handle, 'resource-payload');
+
+        $request = RequestBuilder::build('PUT', 'https://example.com', ['body' => $handle]);
+
+        self::assertSame('resource-payload', (string) $request->getBody());
+    }
+
     public function testBodyRejectsUnsupportedType(): void
     {
         $this->expectException(ConfigurationException::class);

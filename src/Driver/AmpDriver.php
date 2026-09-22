@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Kode\HttpClient\Driver;
 
 use Kode\HttpClient\Config\TransportOptions;
-use Kode\HttpClient\Context\Context;
+use Kode\HttpClient\Driver\Internal\AmpTimeoutErrors;
+use Kode\HttpClient\Driver\Internal\ResolvesTransportOptions;
 use Kode\HttpClient\Exception\NetworkException;
+use Kode\HttpClient\Exception\TimeoutException;
 use Kode\HttpClient\Message\MessageFactory;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -28,6 +30,8 @@ use Psr\Http\Message\ResponseInterface;
  */
 final class AmpDriver implements ConcurrentDriverInterface
 {
+    use ResolvesTransportOptions;
+
     /**
      * 驱动标识，用于 User-Agent 后缀
      */
@@ -95,6 +99,15 @@ final class AmpDriver implements ConcurrentDriverInterface
 
             return $this->createPsrResponse($ampResponse, $body);
         } catch (\Throwable $e) {
+            if (AmpTimeoutErrors::matches($e)) {
+                throw new TimeoutException(
+                    sprintf('Amp 请求超时（%.3fs）: %s', $options->timeout, $e->getMessage()),
+                    $request,
+                    $options->timeout,
+                    $e
+                );
+            }
+
             throw new NetworkException(
                 sprintf('Amp 请求失败: %s', $e->getMessage()),
                 $request,
@@ -217,24 +230,6 @@ final class AmpDriver implements ConcurrentDriverInterface
             $version,
             $reason !== '' ? $reason : null
         );
-    }
-
-    /**
-     * 解析本次请求实际生效的传输配置
-     */
-    private function resolveOptions(): TransportOptions
-    {
-        $contextOptions = Context::getTransportOptions();
-
-        if ($this->defaults === null) {
-            return $contextOptions;
-        }
-
-        $timeout = Context::getTimeout();
-
-        return $timeout !== null
-            ? $this->defaults->with(['timeout' => $timeout])
-            : $this->defaults;
     }
 
     /**

@@ -22,7 +22,6 @@ use Kode\HttpClient\Middleware\MiddlewareInterface;
 use Kode\HttpClient\Middleware\MiddlewareStack;
 use Kode\HttpClient\Middleware\RateLimitMiddleware;
 use Kode\HttpClient\Middleware\RetryMiddleware;
-use Kode\HttpClient\Middleware\TimeoutMiddleware;
 use Kode\HttpClient\Middleware\TracingMiddleware;
 
 /**
@@ -255,7 +254,12 @@ final class Factory
     /**
      * 创建中间件栈
      *
-     * 顺序（由外到内）：日志 → 熔断 → 重试 → 缓存 → 限流 → 认证 → 默认头 → 超时 → 驱动
+     * 顺序（由外到内）：日志 → 熔断 → 重试 → 认证 → 默认头 → 追踪 → 缓存 → 限流 → 驱动
+     *
+     * 缓存必须在认证/默认头之后：缓存键按 Vary 头（含 Authorization）计算，加在外层会拿
+     * 「还没带上身份头」的请求取键，不同用户命中同一份缓存。限流放缓存内侧，命中缓存不该消耗预算。
+     * 不再默认挂 TimeoutMiddleware：驱动已持有同一份 TransportOptions，重复写上下文既无增益
+     * 又让 supportsParallel() 恒为 false（pool()/sendConcurrent() 退化成串行）。
      *
      * @param array<string, mixed> $options 配置选项
      *
@@ -304,33 +308,8 @@ final class Factory
             ));
         }
 
-        if (!empty($options['cache'])) {
-            /** @var array<string, mixed> $config */
-            $config = is_array($options['cache']) ? $options['cache'] : [];
-            $stack->add(new CacheMiddleware(
-                defaultTtl: (int) ($config['ttl'] ?? 300),
-                maxEntries: (int) ($config['max_entries'] ?? 256),
-                varyHeaders: is_array($config['vary'] ?? null)
-                    ? array_map(strval(...), $config['vary'])
-                    : CacheMiddleware::DEFAULT_VARY_HEADERS,
-                respectCacheControl: (bool) ($config['respect_cache_control'] ?? true),
-            ));
-        }
-
-        if (isset($options['rate_limit'])) {
-            if (!is_array($options['rate_limit'])) {
-                throw new ConfigurationException('rate_limit 选项必须是数组');
-            }
-            /** @var array<string, mixed> $config */
-            $config = $options['rate_limit'];
-            $stack->add(new RateLimitMiddleware(
-                capacity: (int) ($config['capacity'] ?? 10),
-                rate: (float) ($config['rate'] ?? 1.0),
-                blocking: (bool) ($config['blocking'] ?? true),
-                maxWait: (float) ($config['max_wait'] ?? 5.0),
-            ));
-        }
-
+        // 认证与默认头必须在缓存之前：缓存键按 Vary 头（含 Authorization）计算，
+        // 若缓存在外层，取键时这些头还没加上——不同身份的请求会命中同一份缓存。
         if (isset($options['auth'])) {
             $stack->add(self::createAuthMiddleware($options['auth']));
         }
@@ -349,8 +328,33 @@ final class Factory
             ));
         }
 
-        $transport = self::createTransportOptions($options);
-        $stack->add(new TimeoutMiddleware($transport->timeout, $transport->connectTimeout));
+        if (!empty($options['cache'])) {
+            /** @var array<string, mixed> $config */
+            $config = is_array($options['cache']) ? $options['cache'] : [];
+            $stack->add(new CacheMiddleware(
+                defaultTtl: (int) ($config['ttl'] ?? 300),
+                maxEntries: (int) ($config['max_entries'] ?? 256),
+                varyHeaders: is_array($config['vary'] ?? null)
+                    ? array_map(strval(...), $config['vary'])
+                    : CacheMiddleware::DEFAULT_VARY_HEADERS,
+                respectCacheControl: (bool) ($config['respect_cache_control'] ?? true),
+            ));
+        }
+
+        // 限流放缓存内侧：命中缓存的请求不会真的外呼，不该消耗限流预算
+        if (isset($options['rate_limit'])) {
+            if (!is_array($options['rate_limit'])) {
+                throw new ConfigurationException('rate_limit 选项必须是数组');
+            }
+            /** @var array<string, mixed> $config */
+            $config = $options['rate_limit'];
+            $stack->add(new RateLimitMiddleware(
+                capacity: (int) ($config['capacity'] ?? 10),
+                rate: (float) ($config['rate'] ?? 1.0),
+                blocking: (bool) ($config['blocking'] ?? true),
+                maxWait: (float) ($config['max_wait'] ?? 5.0),
+            ));
+        }
 
         if (isset($options['middleware'])) {
             if (!is_iterable($options['middleware'])) {

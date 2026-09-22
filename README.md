@@ -211,6 +211,9 @@ use Kode\HttpClient\Middleware\TimeoutMiddleware;
 $middleware = new TimeoutMiddleware(30.0);
 ```
 
+> `Factory::create()` 不再自动挂载本中间件：驱动本身已持有同一份 `TransportOptions`，
+> 多挂一层恒等中间件只会让中间件栈非空，从而禁用批量请求的真并发。需要它时手工加入 `middleware` 选项。
+
 ### 日志中间件
 
 记录请求和响应信息：
@@ -280,6 +283,13 @@ $requestId = Context::initialize([
 
 // 清除上下文
 Context::clear();
+```
+
+单次请求要临时改传输参数时不必手工操作上下文，`request()` 的 `timeout` / `transport` 选项即可，
+数组形态只覆盖显式给出的字段（客户端已配的 `proxy`、`verify` 等保持不变），作用域结束后自动还原：
+
+```php
+$response = $client->get('/x', ['transport' => ['follow_redirects' => false, 'timeout' => 2.0]]);
 ```
 
 ## 与 kode/fibers 集成

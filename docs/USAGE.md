@@ -108,15 +108,25 @@ $response = $client->get('/v1/users');   // => https://api.example.com/v1/users
 | `headers` | `array` | 请求头 |
 | `json` | `mixed` | JSON 体，自动设置 `Content-Type` |
 | `form` | `array` | 表单体，自动设置 `Content-Type` |
-| `body` | `string\|StreamInterface` | 原始体 |
+| `body` | `string\|resource\|StreamInterface` | 原始体（资源会被包成流，句柄仍由调用方关闭） |
 | `version` | `string` | 协议版本，如 `'1.1'`、`'2'` |
 | `timeout` | `float` | 仅本次请求的超时（秒） |
 | `transport` | `TransportOptions\|array` | 仅本次请求的传输配置 |
 
-`timeout` 与 `transport` 只对当前请求生效，执行后上下文自动还原。
+`timeout` 与 `transport` 只对当前请求生效，执行后上下文自动还原（异常路径同样还原）。
 
 ```php
 $client->get('/slow', ['timeout' => 2.0]);   // 单次短时超时
+```
+
+`transport` 传数组是**按字段覆盖**客户端/驱动已有的传输配置，传 `TransportOptions` 实例则是**整体替换**：
+
+```php
+// 客户端配置了 proxy + 自建 CA；这里只想关掉跟随重定向
+$client->get('/x', ['transport' => ['follow_redirects' => false]]);   // proxy、CA 仍然生效
+
+// 想要一份完全不同的传输配置，就传对象
+$client->get('/x', ['transport' => new TransportOptions(proxy: null)]);
 ```
 
 完整清单见 [API 文档](API.md#请求选项)。
@@ -204,6 +214,9 @@ $client = Factory::create([
     ],
 ]);
 ```
+
+缓存键默认把 `Authorization`、`Cookie` 等身份头算进去（`vary` 可改），并且缓存挂在认证/默认头中间件**内侧**，
+所以不同令牌、不同身份的请求不会共用同一份响应。同一 URL 被多用户复用时，不要为此把 `vary` 配空。
 
 ### 限流（令牌桶）
 
@@ -319,8 +332,14 @@ class AddRequestIdMiddleware implements MiddlewareInterface
 
 ### 中间件执行顺序
 
-经 `Factory::create()` 时顺序为：
-`logger` → `circuit_breaker` → `retry` → `cache` → `rate_limit` → `auth` → `headers` → `trace` → `timeout` → 自定义 `middleware`。
+经 `Factory::create()` 时顺序为（由外到内）：
+`logger` → `circuit_breaker` → `retry` → `auth` → `headers` → `trace` → `cache` → `rate_limit` → 自定义 `middleware` → 驱动。
+
+两处顺序是语义而非风格：缓存必须在认证/默认头之后（否则身份还没上，缓存键就算好了，不同用户互相命中）；
+限流必须在缓存之后（命中缓存的请求不外呼，不该扣令牌）。
+
+工厂不再自动追加 `TimeoutMiddleware`——驱动已从同一份 `TransportOptions` 拿到超时值，
+多挂一层只会让栈非空、把 `supportsParallel()` 恒置为 `false`。
 
 ---
 
@@ -339,6 +358,10 @@ $response = $client->get('/path');   // 使用上述上下文
 
 Context::clear();               // 用完清理（通常框架/请求结束时调用）
 ```
+
+传输配置在上下文里有两条通道：`setTransportOptions()` 整体替换（只在驱动没有自带默认配置时兜底），
+`setTransportOverrides(['proxy' => ...])` 按字段覆盖（驱动把它叠到自己的默认配置上）。
+自己写中间件想临时改传输参数时，应当走覆盖通道并在 `finally` 里还原外层值，`TimeoutMiddleware` 即为例。
 
 更高阶的能力（分布式 trace、`startTrace()`、`toHeaders()`/`fromHeaders()`）由底层 `Kode\Context\Context` 提供，并被 `TracingMiddleware` 使用。完整方法见 [API 文档](API.md#context)。
 

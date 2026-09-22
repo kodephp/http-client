@@ -8,13 +8,17 @@ use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use Kode\HttpClient\Context\Context;
 use Kode\HttpClient\Exception\ConfigurationException;
+use Kode\HttpClient\Config\TransportOptions;
+use Kode\HttpClient\Driver\CurlDriver;
 use Kode\HttpClient\Exception\NetworkException;
+use Kode\HttpClient\Message\MessageFactory;
 use Kode\HttpClient\HttpClient;
 use Kode\HttpClient\Middleware\HeadersMiddleware;
 use Kode\HttpClient\Middleware\MiddlewareStack;
 use Kode\HttpClient\Response\HttpResponse;
 use Kode\HttpClient\Tests\Support\RecordingDriver;
 use PHPUnit\Framework\TestCase;
+use Psr\Http\Message\ResponseInterface;
 
 /**
  * HttpClient 测试
@@ -286,5 +290,67 @@ final class HttpClientTest extends TestCase
 
         $this->expectException(ConfigurationException::class);
         $client->get('https://example.com', ['timeoutt' => 1]);
+    }
+
+    public function testScopedTransportOptionsReachTheDriver(): void
+    {
+        // 旧实现只在驱动「无默认配置」时读上下文，Factory 恒传默认配置，
+        // 于是除 timeout 外的请求级 transport 选项全被静默丢弃
+        $driver = new CurlDriver(new TransportOptions(
+            timeout: 30.0,
+            maxRedirects: 9,
+            verify: '/etc/my-ca.pem',
+            proxy: 'http://127.0.0.1:7890',
+        ));
+        $observed = null;
+
+        $spy = new MiddlewareStack([
+            new Support\CallbackMiddleware(
+                function ($request, callable $next) use (&$observed, $driver): ResponseInterface {
+                    $resolve = new \ReflectionMethod($driver, 'resolveOptions');
+                    $observed = $resolve->invoke($driver);
+
+                    return MessageFactory::createResponse(200);
+                }
+            ),
+        ]);
+
+        (new HttpClient($driver, $spy))->get('https://example.com', [
+            'transport' => ['follow_redirects' => false],
+            'timeout' => 2.0,
+        ]);
+
+        self::assertNotNull($observed);
+        self::assertFalse($observed->followRedirects, '请求级 transport 必须真的到达驱动');
+        self::assertSame(2.0, $observed->timeout);
+        self::assertSame(9, $observed->maxRedirects, '未覆盖的客户端级配置不得被冲掉');
+        self::assertSame('/etc/my-ca.pem', $observed->verify);
+        self::assertSame('http://127.0.0.1:7890', $observed->proxy);
+        self::assertSame([], Context::transportOverrides(), '请求结束后必须还原覆盖项');
+    }
+
+    public function testWholeTransportOptionsObjectReplacesClientDefaults(): void
+    {
+        // 交出完整 TransportOptions 实例即视为「整份替换」，与数组的按字段覆盖区分开
+        $driver = new CurlDriver(new TransportOptions(proxy: 'http://127.0.0.1:7890'));
+        $observed = null;
+
+        $spy = new MiddlewareStack([
+            new Support\CallbackMiddleware(
+                function ($request, callable $next) use (&$observed, $driver): ResponseInterface {
+                    $observed = (new \ReflectionMethod($driver, 'resolveOptions'))->invoke($driver);
+
+                    return MessageFactory::createResponse(200);
+                }
+            ),
+        ]);
+
+        (new HttpClient($driver, $spy))->get('https://example.com', [
+            'transport' => new TransportOptions(followRedirects: false),
+        ]);
+
+        self::assertNotNull($observed);
+        self::assertFalse($observed->followRedirects);
+        self::assertNull($observed->proxy, '整份替换时客户端级 proxy 不保留');
     }
 }

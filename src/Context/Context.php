@@ -45,6 +45,11 @@ final class Context
     public const string TRANSPORT_KEY = 'http_transport_options';
 
     /**
+     * 传输层「按字段覆盖」键名
+     */
+    public const string TRANSPORT_OVERRIDES_KEY = 'http_transport_overrides';
+
+    /**
      * 私有构造函数，防止实例化
      */
     private function __construct()
@@ -195,6 +200,37 @@ final class Context
     }
 
     /**
+     * 读取「按字段覆盖」的传输层选项
+     *
+     * 与 setTransportOptions() 的整体替换不同，这里只记录调用方显式给出的字段，
+     * 驱动把它叠加到客户端级默认配置上——否则请求级 ['transport' => ['follow_redirects' => false]]
+     * 要么整份冲掉客户端的 proxy/CA 设置，要么像旧实现一样被完全忽略。
+     *
+     * @return array<string, mixed> 键为 TransportOptions::toArray() 的字段名；未设置时为空数组
+     */
+    public static function transportOverrides(): array
+    {
+        $overrides = BaseContext::get(self::TRANSPORT_OVERRIDES_KEY);
+
+        return is_array($overrides) ? $overrides : [];
+    }
+
+    /**
+     * 设置「按字段覆盖」的传输层选项
+     *
+     * @param array<string, mixed>|null $overrides 显式给出的字段；null 表示清除
+     */
+    public static function setTransportOverrides(?array $overrides): void
+    {
+        if ($overrides === null || $overrides === []) {
+            BaseContext::delete(self::TRANSPORT_OVERRIDES_KEY);
+            return;
+        }
+
+        BaseContext::set(self::TRANSPORT_OVERRIDES_KEY, $overrides);
+    }
+
+    /**
      * 清除超时配置
      */
     public static function clearTimeout(): void
@@ -225,6 +261,10 @@ final class Context
                     ? $transport
                     : TransportOptions::fromArray((array) $transport)
             );
+            // 数组形态只显式给出了部分字段，同时记录为按字段覆盖，供有默认配置的驱动使用
+            if (!$transport instanceof TransportOptions) {
+                self::setTransportOverrides((array) $transport);
+            }
         }
 
         self::setStartTime(microtime(true));
@@ -245,6 +285,7 @@ final class Context
         BaseContext::delete(self::START_TIME_KEY);
         BaseContext::delete(self::REQUEST_ID_KEY);
         BaseContext::delete(self::TRANSPORT_KEY);
+        BaseContext::delete(self::TRANSPORT_OVERRIDES_KEY);
     }
 
     /**

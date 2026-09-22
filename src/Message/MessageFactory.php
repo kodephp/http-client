@@ -248,6 +248,16 @@ final class MessageFactory
     }
 
     /**
+     * 由 PHP 资源创建 PSR-7 流
+     *
+     * @param resource $resource 已打开的流资源
+     */
+    public static function createStreamFromResource($resource): StreamInterface
+    {
+        return self::streamFactory()->createStreamFromResource($resource);
+    }
+
+    /**
      * 创建 PSR-7 URI
      *
      * @param string $uri URI 字符串

@@ -145,14 +145,17 @@ public function sendRequestWithContext(RequestInterface $request, mixed $context
 | `headers` | `array<string, string\|string[]>` | 请求头 |
 | `json` | `mixed` | JSON 请求体，自动设 `Content-Type: application/json; charset=utf-8` |
 | `form` | `array` | 表单体，自动设 `Content-Type: application/x-www-form-urlencoded` |
-| `body` | `string\|StreamInterface` | 原始请求体 |
+| `body` | `string\|resource\|StreamInterface` | 原始请求体（资源会被包成流读取，用完不关闭，由调用方负责） |
 | `version` | `string` | HTTP 协议版本，如 `'1.1'`、`'2'` |
 | `timeout` | `float` | **仅本次请求**生效的超时（秒） |
 | `transport` | `TransportOptions\|array` | **仅本次请求**生效的传输配置 |
 
 > `json`、`form`、`body` **三者互斥**，同时传入会抛出 `ConfigurationException`。
 >
-> `timeout` 与 `transport` 属于作用域选项：执行期间写入上下文，请求结束后自动还原。
+> `timeout` 与 `transport` 属于作用域选项：执行期间写入上下文，请求结束后自动还原（异常路径同样还原）。
+>
+> `transport` 传**数组**时是「按字段覆盖」：只改写显式给出的字段，客户端/驱动已配置的 `proxy`、`verify`、`max_redirects` 等原样保留；
+> 传 **`TransportOptions` 实例**时是整体替换。两种形态都会落到 [`Context::transportOverrides()`](#context) 这条独立通道上，可嵌套叠加。
 
 ---
 
@@ -244,8 +247,17 @@ public static function create(array $options = []): HttpClient
 
 **`trace` 子键：** `propagate_response`(false)。
 
-> **中间件执行顺序**（按加入栈的先后）：
-> `logger` → `circuit_breaker` → `retry` → `cache` → `rate_limit` → `auth` → `headers` → `trace` → `timeout` → 自定义 `middleware`。
+> **中间件执行顺序**（按加入栈的先后，由外到内）：
+> `logger` → `circuit_breaker` → `retry` → `auth` → `headers` → `trace` → `cache` → `rate_limit` → 自定义 `middleware` → 驱动。
+>
+> 顺序即语义，两处不可调换：
+> - **缓存必须在 `auth` / `headers` 之后**。缓存键按 `Vary` 头（默认含 `Authorization`）计算，
+>   挂在认证外侧时「算键的那一刻还没带身份头」，不同用户会命中同一份缓存（他人响应体直接泄给下一个请求）。
+> - **限流在缓存内侧**。命中缓存的请求不外呼，不应消耗令牌预算。
+>
+> 工厂不再默认追加 `TimeoutMiddleware`：驱动已从同一份 `TransportOptions` 拿到超时值，
+> 多挂一层恒等中间件只会让栈非空，从而把 `supportsParallel()` 恒置为 `false`（批量请求退化为逐条派发）。
+> 需要「上下文里始终有超时值」的场景仍可手工 `new TimeoutMiddleware()` 加入 `middleware` 选项。
 
 ### 其他工厂方法
 
@@ -304,6 +316,11 @@ public function with(array $overrides): self   // 派生新实例
 public function toArray(): array
 ```
 
+构造时即校验（`ConfigurationException`）：`timeout` / `connect_timeout` / `max_redirects` 不可为负，
+`user_agent` 与 `default_headers` 的名称、取值禁止出现 CR/LF，头名称不可为空。
+默认请求头不经 PSR-7 校验、是直接拼进 `CURLOPT_HTTPHEADER` 的，带换行等于凭空多下发一条请求头，
+因此在配置构建处报错，而不是静默发出畸形请求。
+
 ---
 
 ## Context
@@ -332,11 +349,23 @@ public static function rawTransportOptions(): ?TransportOptions
 public static function getTransportOptions(): TransportOptions
 public static function setTransportOptions(?TransportOptions $options): void
 
+// 按字段覆盖通道（键取 TransportOptions::toArray() 的字段名）
+public static function transportOverrides(): array
+public static function setTransportOverrides(?array $overrides): void
+public const string TRANSPORT_OVERRIDES_KEY = 'http_transport_overrides';
+
 public static function initialize(array $options = []): string  // 返回请求 ID
 public static function clear(): void
 public static function export(): array
 public static function import(array $data): void
 ```
+
+传输层在上下文里有两条通道，语义不同，驱动按「覆盖集 > 驱动默认配置 > 整体配置」的顺序取用：
+
+- `setTransportOptions()` 是**整体替换**，只在驱动没有自带默认配置时兜底使用；
+- `setTransportOverrides()` 是**按字段覆盖**，`['follow_redirects' => false]` 这类局部意图叠加到驱动的 `proxy` / `verify` 等既有配置上，不会把它们冲掉。
+
+`request()` 的 `transport` 选项与 `TimeoutMiddleware` 写的就是这条覆盖通道，作用域结束后自动还原外层值。
 
 分布式追踪相关能力（`startTrace()`、`toHeaders()`、`fromHeaders()`、`setCorrelationId()` 等）由底层 `Kode\Context\Context` 直接提供，并被 [`TracingMiddleware`](#tracingmiddleware) 使用。
 
@@ -417,7 +446,8 @@ public function clearCache(?string $cacheKey = null): void
 public function getCacheStats(): array
 ```
 
-LRU 淘汰，仅缓存安全方法。
+LRU 淘汰，仅缓存安全方法（`GET` / `HEAD`）。缓存键按 `varyHeaders` 计算，默认 `DEFAULT_VARY_HEADERS = ['Authorization', 'Cookie', 'Accept', 'Accept-Language']`
+——因此它必须挂在认证与默认头中间件**内侧**（见 [`Factory::create`](#create) 的顺序说明），否则不同身份会共用同一份缓存。
 
 ### RateLimitMiddleware
 
@@ -467,6 +497,12 @@ public function defaultOptions(): TransportOptions
 ```
 
 上下文中已有超时设置时优先使用上下文的值。
+
+除写入整体传输配置外，本中间件还会把 `timeout` / `connect_timeout` 记入 `Context::transportOverrides()`
+这条按字段覆盖通道（退出时连同外层值一起还原），这样带默认配置的驱动只改超时、不动 `proxy` 等字段。
+
+> 经 `Factory` 创建客户端时**不再**自动挂载本中间件（驱动已持有同一份 `TransportOptions`），
+> 详见 [`Factory::create`](#create) 的顺序说明。
 
 ### HeadersMiddleware
 
@@ -533,6 +569,31 @@ interface ConcurrentDriverInterface extends DriverInterface
 | `amp` | `AmpDriver` | 事件循环 | amphp/http-client |
 
 全部实现 `ConcurrentDriverInterface`。`Factory::detectDriver()` 按运行环境自动挑选，`Factory::availableDrivers()` 返回当前可用列表。
+
+#### 传输配置的取用
+
+各驱动统一通过 `Driver\Internal\ResolvesTransportOptions` 解析本次请求实际生效的配置，优先级：
+
+1. `Context::transportOverrides()`（含 `request()` 的 `timeout` / `transport` 与 `TimeoutMiddleware`）；
+2. 驱动自带的默认 `TransportOptions`；
+3. `Context::getTransportOptions()`（驱动没有默认配置时兜底）。
+
+#### cURL 方法的映射（`curl` / `fiber` 驱动）
+
+| 方法 | 映射 | 原因 |
+|------|------|------|
+| `HEAD` | `CURLOPT_NOBODY` | 走 `CUSTOMREQUEST` 会让 cURL 一直等并不存在的响应体 |
+| `POST` | `CURLOPT_POST` | 走 `CUSTOMREQUEST` 会把方法「钉住」，301/302 之后仍以 POST 重放到重定向目标（副作用跑两遍） |
+| 带体的 `GET` | `CUSTOMREQUEST = 'GET'` | 只设 `POSTFIELDS` 会被 cURL 自己改成 POST |
+| 其余方法 | `CUSTOMREQUEST = <method>` | — |
+
+#### 超时与网络异常的区分
+
+`swoole` 驱动内部抛出的 `HttpException` 子类（含 `TimeoutException`）原样向上传播，只有协程层的其他异常才归一化为 `NetworkException`；
+`amp` 驱动按 `Driver\Internal\AmpTimeoutErrors` 登记的 amphp 超时类名映射成 `TimeoutException`。
+两者此前都会被降级成 `NetworkException`，调用方按超时分支写的容错逻辑会静默失效。
+
+`swow` 驱动暂未区分超时（swow 的超时异常类名未在本仓库环境实测，见更新日志「已知未覆盖项」）。
 
 ---
 

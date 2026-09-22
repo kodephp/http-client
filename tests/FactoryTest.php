@@ -98,8 +98,8 @@ final class FactoryTest extends TestCase
             'middleware' => [new HeadersMiddleware(['X-Extra' => '1'])],
         ]);
 
-        // 日志 + 熔断 + 重试 + 缓存 + 限流 + 认证 + 默认头 + 超时 + 自定义
-        self::assertCount(9, $stack);
+        // 日志 + 熔断 + 重试 + 认证 + 默认头 + 缓存 + 限流 + 自定义（不再有恒等的超时中间件）
+        self::assertCount(8, $stack);
         self::assertInstanceOf(MiddlewareStack::class, $stack);
     }
 
@@ -107,8 +107,9 @@ final class FactoryTest extends TestCase
     {
         $stack = Factory::createMiddlewareStack(['retries' => 0]);
 
-        // 仅剩超时中间件
-        self::assertCount(1, $stack);
+        // 空栈：默认的超时中间件已从工厂移除（驱动已持有同一份 TransportOptions），
+        // 于是 retries=0 的客户端 supportsParallel() 才可能为真
+        self::assertCount(0, $stack);
     }
 
     public function testBasicAuthConfiguration(): void
@@ -118,7 +119,7 @@ final class FactoryTest extends TestCase
             'auth' => ['type' => 'basic', 'username' => 'u', 'password' => 'p'],
         ]);
 
-        self::assertCount(2, $stack);
+        self::assertCount(1, $stack);
     }
 
     public function testUnknownAuthTypeIsRejected(): void
@@ -147,7 +148,7 @@ final class FactoryTest extends TestCase
 
         self::assertNotNull($client->getMiddlewareStack());
         self::assertSame('https://api.example.com', $client->getBaseUri());
-        // 由于默认会装配重试+超时中间件，supportsParallel() 为 false；外呼要重试/熔断必须用 Factory::create()
+        // 默认 retries=3 会挂上重试中间件，栈非空即逐条派发；批量并发要显式 retries=0
         self::assertFalse($client->supportsParallel());
     }
 
@@ -163,8 +164,8 @@ final class FactoryTest extends TestCase
 
         $stack = $client->getMiddlewareStack();
         self::assertNotNull($stack);
-        // 重试 + 熔断 + 限流 + 超时（至少 4 个），且与 Factory::create 行为一致
-        self::assertGreaterThanOrEqual(4, count($stack));
+        // 重试 + 熔断 + 限流（至少 3 个），且与 Factory::create 行为一致
+        self::assertGreaterThanOrEqual(3, count($stack));
 
         $reference = Factory::create([
             'retries' => 2,
@@ -198,5 +199,31 @@ final class FactoryTest extends TestCase
         foreach ($drivers as $name => $supported) {
             self::assertIsBool($supported, $name . ' 的可用性必须是布尔值');
         }
+    }
+
+    public function testTransportDefaultHeadersRejectCrlf(): void
+    {
+        // 默认头不经 PSR-7，直接拼进 CURLOPT_HTTPHEADER：带 CR/LF 就等于多下发一条头
+        $this->expectException(ConfigurationException::class);
+        Factory::create(['transport' => ['default_headers' => ['X-C' => "1\r\nX-Injected: yes"]]]);
+    }
+
+    public function testTransportUserAgentRejectsCrlf(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        Factory::create(['transport' => ['user_agent' => "Kode/2\nx: y"]]);
+    }
+
+    public function testTransportOptionsConstructorRejectsCrlf(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        new TransportOptions(defaultHeaders: ["X\r\nInjected" => "1"]);
+    }
+
+    public function testTransportOptionsRejectsEmptyHeaderName(): void
+    {
+        // 空名称的头拼进 CURLOPT_HTTPHEADER 后是一条没有字段名的畸形头，构建配置时即报错
+        $this->expectException(ConfigurationException::class);
+        new TransportOptions(defaultHeaders: ['' => 'x']);
     }
 }

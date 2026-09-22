@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Kode\HttpClient\Driver;
 
 use Kode\HttpClient\Config\TransportOptions;
-use Kode\HttpClient\Context\Context;
+use Kode\HttpClient\Driver\Internal\ResolvesTransportOptions;
 use Kode\HttpClient\Exception\NetworkException;
 use Kode\HttpClient\Message\MessageFactory;
 use Psr\Http\Message\RequestInterface;
@@ -23,6 +23,8 @@ use Psr\Http\Message\ResponseInterface;
  */
 final class SwowDriver implements ConcurrentDriverInterface
 {
+    use ResolvesTransportOptions;
+
     /**
      * 驱动标识，用于 User-Agent 后缀
      */
@@ -216,24 +218,6 @@ final class SwowDriver implements ConcurrentDriverInterface
         }
 
         return $request;
-    }
-
-    /**
-     * 解析本次请求实际生效的传输配置
-     */
-    private function resolveOptions(): TransportOptions
-    {
-        $contextOptions = Context::getTransportOptions();
-
-        if ($this->defaults === null) {
-            return $contextOptions;
-        }
-
-        $timeout = Context::getTimeout();
-
-        return $timeout !== null
-            ? $this->defaults->with(['timeout' => $timeout])
-            : $this->defaults;
     }
 
     /**

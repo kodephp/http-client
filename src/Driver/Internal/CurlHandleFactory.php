@@ -67,6 +67,29 @@ final class CurlHandleFactory
 
         $collector->reset();
 
+        curl_setopt_array($handle, self::buildOptions($request, $options, $collector, $userAgentSuffix));
+
+        return $handle;
+    }
+
+    /**
+     * 把 PSR-7 请求 + 传输配置翻译为 cURL 选项数组
+     *
+     * 与句柄无关，单独暴露是为了让「方法如何映射到 cURL 选项」这类关键分支
+     * 能在无网络、无句柄的状态下被断言（cURL 不提供 setopt 反查）。
+     *
+     * @param RequestInterface $request PSR-7 请求
+     * @param TransportOptions $options 传输配置
+     * @param HeaderCollector $collector 响应头收集器
+     * @param string $userAgentSuffix 附加在 User-Agent 后的标识
+     * @return array<int, mixed> cURL 选项数组
+     */
+    public static function buildOptions(
+        RequestInterface $request,
+        TransportOptions $options,
+        HeaderCollector $collector,
+        string $userAgentSuffix = ''
+    ): array {
         $uri = $request->getUri();
         $method = strtoupper($request->getMethod());
         $body = (string) $request->getBody();
@@ -90,7 +113,12 @@ final class CurlHandleFactory
         // HEAD 必须使用 NOBODY，否则 cURL 会一直等待并不存在的响应体
         if ($method === 'HEAD') {
             $curlOptions[CURLOPT_NOBODY] = true;
-        } else {
+        } elseif ($method === 'POST') {
+            // 走 CURLOPT_POST 而不是 CUSTOMREQUEST：后者会把方法「钉住」，301/302 之后
+            // cURL 不再按 RFC 复归为 GET，等于向重定向目标重复提交一次 POST（副作用可能跑两遍）
+            $curlOptions[CURLOPT_POST] = true;
+        } elseif ($method !== 'GET' || $body !== '') {
+            // 带请求体的 GET 需显式声明方法，否则 POSTFIELDS 会让 cURL 自己改成 POST
             $curlOptions[CURLOPT_CUSTOMREQUEST] = $method;
         }
 
@@ -128,9 +156,7 @@ final class CurlHandleFactory
             $curlOptions[$option] = $value;
         }
 
-        curl_setopt_array($handle, $curlOptions);
-
-        return $handle;
+        return $curlOptions;
     }
 
     /**

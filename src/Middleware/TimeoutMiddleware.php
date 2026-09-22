@@ -56,6 +56,7 @@ final class TimeoutMiddleware implements MiddlewareInterface
     {
         $previousTimeout = Context::getTimeout();
         $previousTransport = Context::rawTransportOptions();
+        $previousOverrides = Context::transportOverrides();
 
         $timeout = $previousTimeout ?? $this->defaultTimeout;
 
@@ -65,12 +66,16 @@ final class TimeoutMiddleware implements MiddlewareInterface
         }
 
         Context::setTimeout($timeout);
+        // 整体配置留给「驱动无默认配置」的场景；按字段覆盖让有默认配置的驱动只改超时、
+        // 不动 proxy/CA 等其它字段（旧实现只写整体，驱动侧要么全忽略要么全冲掉）
         Context::setTransportOptions(Context::getTransportOptions()->with($overrides));
+        Context::setTransportOverrides($overrides + $previousOverrides);
 
         try {
             return $next($request);
         } finally {
             Context::setTransportOptions($previousTransport);
+            Context::setTransportOverrides($previousOverrides);
 
             if ($previousTimeout !== null) {
                 Context::setTimeout($previousTimeout);

@@ -387,7 +387,7 @@ class HttpClient implements HttpClientInterface
      * 提取仅对本次请求生效的上下文级选项
      *
      * @param array<string, mixed> $options 请求选项
-     * @return array{timeout: float|null, transport: TransportOptions|null}|null 无此类选项时返回 null
+     * @return array{timeout: float|null, transport: TransportOptions|null, overrides: array<string, mixed>}|null 无此类选项时返回 null
      */
     private function extractScopedOptions(array $options): ?array
     {
@@ -399,11 +399,17 @@ class HttpClient implements HttpClientInterface
         }
 
         $transport = null;
+        // 数组形态只显式给出了部分字段，原样留作「按字段覆盖」，驱动才能把它叠到客户端默认配置上
+        $overrides = [];
         if ($hasTransport) {
             $raw = $options['transport'];
-            $transport = $raw instanceof TransportOptions
-                ? $raw
-                : TransportOptions::fromArray((array) $raw);
+            if ($raw instanceof TransportOptions) {
+                $transport = $raw;
+                $overrides = $raw->toArray();
+            } else {
+                $transport = TransportOptions::fromArray((array) $raw);
+                $overrides = (array) $raw;
+            }
         }
 
         $timeout = $hasTimeout ? (float) $options['timeout'] : null;
@@ -412,14 +418,14 @@ class HttpClient implements HttpClientInterface
             $transport = $transport->with(['timeout' => $timeout]);
         }
 
-        return ['timeout' => $timeout, 'transport' => $transport];
+        return ['timeout' => $timeout, 'transport' => $transport, 'overrides' => $overrides];
     }
 
     /**
      * 在临时上下文中执行回调，执行完成后恢复原有上下文
      *
      * @template T
-     * @param array{timeout: float|null, transport: TransportOptions|null} $scoped 临时选项
+     * @param array{timeout: float|null, transport: TransportOptions|null, overrides: array<string, mixed>} $scoped 临时选项
      * @param callable(): T $callback 待执行回调
      * @return T 回调返回值
      */
@@ -427,6 +433,7 @@ class HttpClient implements HttpClientInterface
     {
         $previousTimeout = Context::getTimeout();
         $previousTransport = Context::rawTransportOptions();
+        $previousOverrides = Context::transportOverrides();
 
         if ($scoped['timeout'] !== null) {
             Context::setTimeout($scoped['timeout']);
@@ -438,10 +445,16 @@ class HttpClient implements HttpClientInterface
             Context::setTransportOptions($previousTransport->with(['timeout' => $scoped['timeout']]));
         }
 
+        if ($scoped['overrides'] !== []) {
+            // 嵌套作用域：本次请求显式给出的字段优先，未给出的沿用外层
+            Context::setTransportOverrides($scoped['overrides'] + $previousOverrides);
+        }
+
         try {
             return $callback();
         } finally {
             Context::setTransportOptions($previousTransport);
+            Context::setTransportOverrides($previousOverrides);
 
             if ($previousTimeout !== null) {
                 Context::setTimeout($previousTimeout);

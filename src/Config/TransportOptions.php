@@ -58,6 +58,24 @@ final readonly class TransportOptions
         if ($this->maxRedirects < 0) {
             throw new ConfigurationException('max_redirects 不能为负数');
         }
+
+        // 默认头不经 PSR-7，是直接拼进 CURLOPT_HTTPHEADER 与各驱动 header 数组的：
+        // 名称或取值带 CR/LF 就能凭空多出一条请求头（头投毒/请求走私），在配置构建处即报错。
+        self::assertHeaderSafe('User-Agent', $this->userAgent);
+
+        foreach ($this->defaultHeaders as $name => $value) {
+            self::assertHeaderSafe((string) $name, is_scalar($value) ? (string) $value : '');
+        }
+    }
+
+    private static function assertHeaderSafe(string $name, string $value): void
+    {
+        if ($name === '' || strpbrk($name . $value, "\r\n") !== false) {
+            throw new ConfigurationException(sprintf(
+                '请求头不合法：名称不可为空，且名称与取值均禁止 CR/LF（会多出一条请求头）: %s',
+                $name === '' ? '(空名称)' : $name,
+            ));
+        }
     }
 
     /**

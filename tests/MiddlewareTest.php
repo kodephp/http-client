@@ -314,6 +314,58 @@ final class MiddlewareTest extends TestCase
         self::assertSame(1.25, Context::getTimeout());
     }
 
+    public function testTimeoutMiddlewareKeepsOuterFieldLevelOverrides(): void
+    {
+        Context::setTransportOverrides(['proxy' => 'http://outer:7890']);
+        $middleware = new TimeoutMiddleware(5.0, 2.0);
+        $observed = null;
+
+        $middleware->process(
+            new Request('GET', 'https://example.com'),
+            function (RequestInterface $req) use (&$observed): ResponseInterface {
+                $observed = Context::transportOverrides();
+                return new Response(200);
+            }
+        );
+
+        self::assertSame('http://outer:7890', $observed['proxy'] ?? null, '超时只改超时，不得抹掉外层已给的字段');
+        self::assertSame(5.0, $observed['timeout'] ?? null);
+        self::assertSame(2.0, $observed['connect_timeout'] ?? null);
+    }
+
+    public function testTimeoutMiddlewareRestoresOverridesOnExit(): void
+    {
+        Context::setTransportOverrides(['proxy' => 'http://outer:7890']);
+
+        $middleware = new TimeoutMiddleware(5.0);
+        $middleware->process(
+            new Request('GET', 'https://example.com'),
+            static fn (RequestInterface $req): ResponseInterface => new Response(200)
+        );
+
+        self::assertSame(['proxy' => 'http://outer:7890'], Context::transportOverrides(), '退出必须还原外层覆盖集');
+    }
+
+    public function testTimeoutMiddlewareRestoresOverridesWhenUpstreamThrows(): void
+    {
+        Context::setTransportOverrides(['verify' => false]);
+
+        $middleware = new TimeoutMiddleware(5.0);
+
+        try {
+            $middleware->process(
+                new Request('GET', 'https://example.com'),
+                static function (RequestInterface $req): ResponseInterface {
+                    throw new \RuntimeException('upstream blew up');
+                }
+            );
+            self::fail('异常应原样抛出');
+        } catch (\RuntimeException) {
+        }
+
+        self::assertSame(['verify' => false], Context::transportOverrides());
+    }
+
     public function testRetryMiddlewareRetriesNetworkErrors(): void
     {
         $slept = [];

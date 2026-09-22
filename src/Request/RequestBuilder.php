@@ -212,7 +212,11 @@ final class RequestBuilder
                 return $request->withBody(MessageFactory::createStream((string) $body));
             }
 
-            throw new ConfigurationException('body 选项只支持字符串、标量或 StreamInterface');
+            if (is_resource($body)) {
+                return $request->withBody(MessageFactory::createStreamFromResource($body));
+            }
+
+            throw new ConfigurationException('body 选项只支持字符串、标量、资源或 StreamInterface');
         }
 
         return $request;
