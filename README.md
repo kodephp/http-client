@@ -2,6 +2,13 @@
 
 一个现代化、高性能的 PHP HTTP 客户端，支持多运行时环境（FPM、CLI、Swoole、Swow、Fiber）。
 
+
+## 版本自述
+
+本包版本可由类常量核对：`Kode\HttpClient\HttpClient::VERSION`，或调用 `HttpClient::version()`（当前 `2.7.0`）。
+
+`composer.json` 的 `version` 字段是 composer 侧的权威值，类常量是它的交叉核对副本——`tests/VersionGuardTest.php` 在两者不一致时直接失败，杜绝「tag 打了、常量忘改」的漂移。
+
 ## 特性
 
 - ✅ **多运行时支持** - 自动检测运行环境，支持 FPM、CLI、Swoole、Swow、Fiber
