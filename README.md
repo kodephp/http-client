@@ -16,7 +16,7 @@
 - ✅ **PSR-7/PSR-18 兼容** - 完全遵循 PSR 标准
 - ✅ **上下文管理** - 使用 `kode/context` 进行请求上下文传递
 - ✅ **中间件机制** - 内置重试、超时、日志、认证、限流、缓存等中间件
-- ✅ **PHP 8.3+ 支持** - 兼容 PHP 8.4 / 8.5 新特性
+- ✅ **PHP 8.4+ 支持** - 兼容 PHP 8.4 / 8.5 新特性
 - ✅ **Fiber 支持** - 原生 Fiber 驱动，支持 kode/fibers 包集成
 - ✅ **类型安全** - 完整的类型声明和静态分析支持
 
@@ -98,7 +98,7 @@ $response = $client->sendRequest($request);
 
 | 运行环境 | 推荐驱动 | 说明 |
 |---------|----------|------|
-| Fiber 环境 | `FiberDriver` | PHP 8.3+ 原生 Fiber 支持，自动协程切换 |
+| Fiber 环境 | `FiberDriver` | PHP 8.4+ 原生 Fiber 支持，自动协程切换 |
 | Swoole 协程 | `SwooleDriver` | 高性能、原生协程支持 |
 | Amp 环境 | `AmpDriver` | 基于事件循环的异步实现 |
 | 默认环境 | `CurlDriver` | 基于 curl 扩展的同步实现 |
@@ -108,7 +108,7 @@ $response = $client->sendRequest($request);
 自动模式下，驱动选择优先级为：
 
 1. **SwooleDriver** - 如果在 Swoole 协程环境中
-2. **FiberDriver** - 如果 PHP 8.3+ 且 curl 扩展可用
+2. **FiberDriver** - 如果 PHP 8.4+ 且 curl 扩展可用
 3. **AmpDriver** - 如果 Amp HTTP 客户端可用
 4. **CurlDriver** - 默认回退
 
@@ -409,7 +409,7 @@ composer test-coverage
 
 ## 要求
 
-- PHP >= 8.3
+- PHP >= 8.4
 - ext-curl（CurlDriver 和 FiberDriver 需要）
 - kode/context ^3.1
 - psr/http-message ^2.0
