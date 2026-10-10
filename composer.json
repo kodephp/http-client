@@ -14,12 +14,11 @@
         "async",
         "concurrent",
         "middleware",
-        "php83",
         "php84"
     ],
     "homepage": "https://github.com/kodephp/http-client",
     "license": "MIT",
-    "version": "3.0.0",
+    "version": "3.0.1",
     "authors": [
         {
             "name": "Kode Team",

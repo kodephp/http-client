@@ -1,6 +1,6 @@
 # 使用指南
 
-适用版本：**2.5.1**（PHP >= 8.3）
+适用版本：**3.0.1**（PHP >= 8.4）
 
 ## 目录
 
@@ -24,7 +24,7 @@
 composer require kode/http-client
 ```
 
-要求 PHP >= 8.3，并安装一个 PSR-17 实现（如 `guzzlehttp/psr7` 或 `nyholm/psr7`）。
+要求 PHP >= 8.4，并安装一个 PSR-17 实现（如 `guzzlehttp/psr7` 或 `nyholm/psr7`）。
 
 ---
 

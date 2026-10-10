@@ -1,6 +1,6 @@
 # API 文档
 
-适用版本：**2.5.1**（PHP >= 8.3）
+适用版本：**3.0.1**（PHP >= 8.4）
 
 ## 目录
 
@@ -563,7 +563,7 @@ interface ConcurrentDriverInterface extends DriverInterface
 | 驱动 | 类 | 并发机制 | 要求 |
 |------|------|----------|------|
 | `curl` | `CurlDriver` | `curl_multi` | ext-curl |
-| `fiber` | `FiberDriver` | Fiber + `curl_multi` | PHP 8.3+ / ext-curl |
+| `fiber` | `FiberDriver` | Fiber + `curl_multi` | PHP 8.4+ / ext-curl |
 | `swoole` | `SwooleDriver` | 原生协程 | ext-swoole |
 | `swow` | `SwowDriver` | 原生协程 | ext-swow |
 | `amp` | `AmpDriver` | 事件循环 | amphp/http-client |
