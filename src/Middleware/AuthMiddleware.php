@@ -53,7 +53,7 @@ final class AuthMiddleware implements MiddlewareInterface
      */
     public function __construct(
         private readonly string $type,
-        string|callable $credential,
+        #[\SensitiveParameter] string|callable $credential,
         private readonly string $apiKeyHeader = 'X-API-Key',
     ) {
         if (!in_array($type, [self::TYPE_BEARER, self::TYPE_API_KEY, self::TYPE_BASIC], true)) {
@@ -101,7 +101,7 @@ final class AuthMiddleware implements MiddlewareInterface
      *
      * @param string|callable $token Bearer Token 或返回 Token 的回调
      */
-    public static function bearer(string|callable $token): self
+    public static function bearer(#[\SensitiveParameter] string|callable $token): self
     {
         return new self(self::TYPE_BEARER, $token);
     }
@@ -112,7 +112,7 @@ final class AuthMiddleware implements MiddlewareInterface
      * @param string|callable $apiKey API Key 或返回 Key 的回调
      * @param string $header API Key 的头名称
      */
-    public static function apiKey(string|callable $apiKey, string $header = 'X-API-Key'): self
+    public static function apiKey(#[\SensitiveParameter] string|callable $apiKey, string $header = 'X-API-Key'): self
     {
         return new self(self::TYPE_API_KEY, $apiKey, $header);
     }
@@ -123,7 +123,7 @@ final class AuthMiddleware implements MiddlewareInterface
      * @param string $username 用户名
      * @param string $password 密码
      */
-    public static function basic(string $username, string $password): self
+    public static function basic(string $username, #[\SensitiveParameter] string $password): self
     {
         return new self(self::TYPE_BASIC, base64_encode($username . ':' . $password));
     }
