@@ -18,7 +18,7 @@
     ],
     "homepage": "https://github.com/kodephp/http-client",
     "license": "MIT",
-    "version": "3.0.4",
+    "version": "3.0.5",
     "authors": [
         {
             "name": "Kode Team",
@@ -31,6 +31,7 @@
     },
     "require": {
         "php": "^8.4",
+        "ext-mbstring": "*",
         "ext-json": "*",
         "kode/context": "^4",
         "psr/http-client": "^1.0",
