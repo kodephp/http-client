@@ -31,7 +31,7 @@ use Psr\Http\Message\UriInterface;
 class HttpClient implements HttpClientInterface
 {
     /** @var string 版本号（与 composer.json 的 version 保持同步，漏改由 VersionGuardTest 拦下） */
-    public const string VERSION = '3.0.1';
+    public const string VERSION = '3.0.2';
 
     /**
      * 获取本包版本号
@@ -343,6 +343,7 @@ class HttpClient implements HttpClientInterface
      * @throws HttpException 当发生网络错误或协议错误时抛出
      * @deprecated 2.4.0 使用 Context::setTimeout() 等静态方法或 request() 的 timeout 选项代替
      */
+    #[\Deprecated('使用 Context::setTimeout() 等静态方法或 request() 的 timeout 选项代替', since: '2.4.0')]
     public function sendRequestWithContext(RequestInterface $request, mixed $context = null): HttpResponse
     {
         return $this->sendRequest($request);

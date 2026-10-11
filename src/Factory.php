@@ -468,17 +468,9 @@ final class Factory
      *
      * @deprecated 2.5.1 请直接使用 {@see Factory::create()}；外呼要重试/熔断/限流必须用 Factory::create
      */
+    #[\Deprecated('请使用 Factory::create() 代替；外呼要重试/熔断/限流必须用 Factory::create', since: '2.5.1')]
     public static function createSimple(array $options = []): HttpClient
     {
-        @trigger_error(
-            sprintf(
-                '%s::createSimple() 已废弃，请使用 %s::create() 代替；外呼要重试/熔断/限流必须用 Factory::create。',
-                self::class,
-                self::class
-            ),
-            E_USER_DEPRECATED
-        );
-
         return self::create($options);
     }
 

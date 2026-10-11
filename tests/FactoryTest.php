@@ -144,7 +144,7 @@ final class FactoryTest extends TestCase
     {
         // 自 2.5.1 起 createSimple 已改为 create 的别名并标记废弃，
         // 不再是“无中间件”极简客户端；历史静默割裂已修复，重试/熔断/限流配置现在生效。
-        $client = Factory::createSimple(['base_uri' => 'https://api.example.com']);
+        $client = @Factory::createSimple(['base_uri' => 'https://api.example.com']);
 
         self::assertNotNull($client->getMiddlewareStack());
         self::assertSame('https://api.example.com', $client->getBaseUri());
