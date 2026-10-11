@@ -43,6 +43,7 @@ final class NetworkException extends HttpException implements NetworkExceptionIn
      *
      * @return RequestInterface 请求对象
      */
+    #[\Override]
     public function getRequest(): RequestInterface
     {
         return $this->request;

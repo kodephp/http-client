@@ -286,6 +286,7 @@ final class HttpResponse implements ResponseInterface
     /**
      * 转换为字符串（等价于读取响应体）
      */
+    #[\Override]
     public function __toString(): string
     {
         return $this->text();

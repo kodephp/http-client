@@ -43,6 +43,7 @@ final class RequestException extends HttpException implements RequestExceptionIn
      *
      * @return RequestInterface 请求对象
      */
+    #[\Override]
     public function getRequest(): RequestInterface
     {
         return $this->request;
