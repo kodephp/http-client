@@ -48,12 +48,6 @@ final class AmpTimeoutErrors
      */
     public static function matches(\Throwable $e): bool
     {
-        foreach (self::TIMEOUT_CLASSES as $timeoutClass) {
-            if ($e instanceof $timeoutClass) {
-                return true;
-            }
-        }
-
-        return false;
+        return array_any(self::TIMEOUT_CLASSES, fn($timeoutClass) => $e instanceof $timeoutClass);
     }
 }

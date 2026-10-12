@@ -174,13 +174,7 @@ final class RetryMiddleware implements MiddlewareInterface
         }
 
         if ($error !== null) {
-            foreach (self::NON_RETRYABLE_EXCEPTIONS as $class) {
-                if ($error instanceof $class) {
-                    return false;
-                }
-            }
-
-            return $error instanceof NetworkExceptionInterface;
+            return array_any(self::NON_RETRYABLE_EXCEPTIONS, fn($class) => $error instanceof $class) ? false : $error instanceof NetworkExceptionInterface;
         }
 
         return $response !== null
