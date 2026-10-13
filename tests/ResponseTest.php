@@ -144,9 +144,33 @@ final class ResponseTest extends TestCase
         new TransportOptions(timeout: -1.0);
     }
 
+    public function testTransportOptionsRejectsMissingCaPathFailFast(): void
+    {
+        // 不存在时不要留到 curl 执行期报「unable to load CA」（又晚又难定位）
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessageMatches('/不存在/');
+        new TransportOptions(verify: '/definitely/not/exist/ca.pem');
+    }
+
+    public function testTransportOptionsAcceptsExistingCaFileAndDir(): void
+    {
+        $file = $this->createTempCaFile();
+
+        self::assertSame($file, (new TransportOptions(verify: $file))->verify);
+        self::assertSame(sys_get_temp_dir(), (new TransportOptions(verify: sys_get_temp_dir()))->verify);
+        unlink($file);
+    }
+
+    private function createTempCaFile(): string
+    {
+        $path = sys_get_temp_dir() . '/kode-httpclient-test-ca-' . bin2hex(random_bytes(4)) . '.pem';
+        file_put_contents($path, "# test CA bundle\n");
+        return $path;
+    }
+
     public function testTransportOptionsRoundTrip(): void
     {
-        $options = new TransportOptions(timeout: 8.0, proxy: 'http://127.0.0.1:1', verify: '/tmp/ca.pem');
+        $options = new TransportOptions(timeout: 8.0, proxy: 'http://127.0.0.1:1', verify: $this->createTempCaFile());
 
         self::assertEquals($options, TransportOptions::fromArray($options->toArray()));
     }

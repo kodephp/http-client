@@ -5,7 +5,7 @@
 
 ## 版本自述
 
-本包版本可由类常量核对：`Kode\HttpClient\HttpClient::VERSION`，或调用 `HttpClient::version()`（当前 `2.7.0`）。
+本包版本可由类常量核对：`Kode\HttpClient\HttpClient::VERSION`，或调用 `HttpClient::version()`（当前 `3.0.7`）。
 
 `composer.json` 的 `version` 字段是 composer 侧的权威值，类常量是它的交叉核对副本——`tests/VersionGuardTest.php` 在两者不一致时直接失败，杜绝「tag 打了、常量忘改」的漂移。
 
@@ -19,6 +19,7 @@
 - ✅ **PHP 8.4+ 支持** - 兼容 PHP 8.4 / 8.5 新特性
 - ✅ **Fiber 支持** - 原生 Fiber 驱动，支持 kode/fibers 包集成
 - ✅ **类型安全** - 完整的类型声明和静态分析支持
+- ✅ **传输安全** - 重定向仅允许 http(s)（禁 file:// 等协议外泄）；`verify` 指向的 CA 路径不存在时配置构建期即报错
 
 ## 安装
 
@@ -298,6 +299,11 @@ Context::clear();
 ```php
 $response = $client->get('/x', ['transport' => ['follow_redirects' => false, 'timeout' => 2.0]]);
 ```
+
+`verify` 可传 `true`（系统 CA）/ `false`（关闭校验）/ 字符串（自定义 CA 文件或目录路径）。
+路径在构造 `TransportOptions` 时即校验存在性——不留到 curl 执行期才报 `unable to load CA`。
+开启 `follow_redirects` 时，重定向目标协议被限制为 http(s)：一次 301 带 `file://`
+在旧实现下会把本地文件读回流量。
 
 ## 与 kode/fibers 集成
 

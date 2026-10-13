@@ -284,6 +284,13 @@ final class HttpClientTest extends TestCase
         self::assertSame($driver, $client->getDriver());
     }
 
+    private function createTempCaFile(): string
+    {
+        $path = sys_get_temp_dir() . '/kode-httpclient-test-ca-' . bin2hex(random_bytes(4)) . '.pem';
+        file_put_contents($path, "# test CA bundle\n");
+        return $path;
+    }
+
     public function testRequestRejectsUnknownOption(): void
     {
         $client = new HttpClient(new RecordingDriver());
@@ -296,10 +303,11 @@ final class HttpClientTest extends TestCase
     {
         // 旧实现只在驱动「无默认配置」时读上下文，Factory 恒传默认配置，
         // 于是除 timeout 外的请求级 transport 选项全被静默丢弃
+        $caFile = $this->createTempCaFile();
         $driver = new CurlDriver(new TransportOptions(
             timeout: 30.0,
             maxRedirects: 9,
-            verify: '/etc/my-ca.pem',
+            verify: $caFile,
             proxy: 'http://127.0.0.1:7890',
         ));
         $observed = null;
@@ -324,7 +332,7 @@ final class HttpClientTest extends TestCase
         self::assertFalse($observed->followRedirects, '请求级 transport 必须真的到达驱动');
         self::assertSame(2.0, $observed->timeout);
         self::assertSame(9, $observed->maxRedirects, '未覆盖的客户端级配置不得被冲掉');
-        self::assertSame('/etc/my-ca.pem', $observed->verify);
+        self::assertSame($caFile, $observed->verify);
         self::assertSame('http://127.0.0.1:7890', $observed->proxy);
         self::assertSame([], Context::transportOverrides(), '请求结束后必须还原覆盖项');
     }

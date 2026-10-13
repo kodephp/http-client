@@ -103,6 +103,9 @@ final class CurlHandleFactory
             CURLOPT_CONNECTTIMEOUT_MS => max(1, (int) round($options->connectTimeout * 1000)),
             CURLOPT_FOLLOWLOCATION => $options->followRedirects,
             CURLOPT_MAXREDIRS => $options->maxRedirects,
+            // 重定向仅允许 http(s)：否则一次 301 就能把请求带到 file://
+            // （读本地文件回流量）甚至不出网的内部协议，这是 Web SSRF 最常见出口。
+            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
             CURLOPT_NOSIGNAL => true,
         ];
 

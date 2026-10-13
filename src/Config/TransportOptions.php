@@ -59,6 +59,13 @@ final readonly class TransportOptions
             throw new ConfigurationException('max_redirects 不能为负数');
         }
 
+        // CA 路径fail-fast：不存在时留到 curl 执行期才报「unable to load CA」
+        // 既晚又难定位，在配置构建处直接拒绝。
+        if (is_string($this->verify) && $this->verify !== ''
+            && !is_file($this->verify) && !is_dir($this->verify)) {
+            throw new ConfigurationException("verify 指定的 CA 证书/目录不存在: {$this->verify}");
+        }
+
         // 默认头不经 PSR-7，是直接拼进 CURLOPT_HTTPHEADER 与各驱动 header 数组的：
         // 名称或取值带 CR/LF 就能凭空多出一条请求头（头投毒/请求走私），在配置构建处即报错。
         self::assertHeaderSafe('User-Agent', $this->userAgent);

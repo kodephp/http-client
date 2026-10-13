@@ -164,4 +164,15 @@ final class CurlHandleFactoryTest extends TestCase
         self::assertContains('Accept: text/plain', $headers);
         self::assertContains('User-Agent: kode-test (curl)', $headers);
     }
+
+    public function testRedirectProtocolsAreRestrictedToHttp(): void
+    {
+        $options = $this->optionsFor('GET');
+
+        // 重定向到 file:// 是一次 301 就能读本地文件回流量的经典出口，必须钉死
+        self::assertSame(
+            CURLPROTO_HTTP | CURLPROTO_HTTPS,
+            $options[CURLOPT_REDIR_PROTOCOLS] ?? null
+        );
+    }
 }
