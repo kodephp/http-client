@@ -40,14 +40,14 @@ final readonly class TransportOptions
     public function __construct(
         public float $timeout = 30.0,
         public float $connectTimeout = 10.0,
-        public bool $followRedirects = true,
+        public private(set) bool $followRedirects = true,
         public int $maxRedirects = 5,
-        public bool|string $verify = true,
+        public private(set) bool|string $verify = true,
         public ?string $proxy = null,
-        public bool $decodeContent = true,
+        public private(set) bool $decodeContent = true,
         public string $userAgent = self::DEFAULT_USER_AGENT,
-        public array $defaultHeaders = [],
-        public array $curlOptions = [],
+        public private(set) array $defaultHeaders = [],
+        public private(set) array $curlOptions = [],
     ) {
         if ($this->timeout < 0) {
             throw new ConfigurationException('timeout 不能为负数');
