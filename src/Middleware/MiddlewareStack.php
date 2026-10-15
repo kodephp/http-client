@@ -18,6 +18,7 @@ use Psr\Http\Message\ResponseInterface;
  * @package Kode\HttpClient\Middleware
  * @author  Kode Team <382601296@qq.com>
  * @license MIT
+ * @implements \IteratorAggregate<int, MiddlewareInterface>
  */
 final class MiddlewareStack implements \Countable, \IteratorAggregate
 {

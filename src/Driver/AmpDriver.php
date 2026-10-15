@@ -88,11 +88,11 @@ final class AmpDriver implements ConcurrentDriverInterface
             $ampRequest = $this->createAmpRequest($request, $options);
 
             if (self::isLegacyPromiseApi()) {
+                // amp v2（Amp\Promise）仅在用户环境安装时可达；静态分析默认只装 v4/v5
                 /** @var object $ampResponse */
-                $ampResponse = \Amp\Promise\wait($client->request($ampRequest));
-                $body = (string) \Amp\Promise\wait($ampResponse->getBody()->buffer());
+                $ampResponse = \Amp\Promise\wait($client->request($ampRequest)); // @phpstan-ignore function.notFound (运行期探测 amp v2)
+                $body = (string) \Amp\Promise\wait($ampResponse->getBody()->buffer()); // @phpstan-ignore function.notFound (运行期探测 amp v2)
             } else {
-                /** @var object $ampResponse */
                 $ampResponse = $client->request($ampRequest);
                 $body = (string) $ampResponse->getBody()->buffer();
             }

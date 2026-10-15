@@ -36,9 +36,9 @@ use Psr\Http\Message\UriInterface;
 final class MessageFactory
 {
     /**
-     * 同时实现四种 PSR-17 工厂接口的「一体化」候选实现
+     * 同时实现四种 PSR-17 工厂接口的「一体化」候选实现（运行期 class_exists 探测，类可未安装）
      *
-     * @var list<class-string>
+     * @var list<string>
      */
     private const array UNIFIED_CANDIDATES = [
         'GuzzleHttp\\Psr7\\HttpFactory',
@@ -46,9 +46,9 @@ final class MessageFactory
     ];
 
     /**
-     * 按接口划分的候选实现
+     * 按接口划分的候选实现（运行期 class_exists 探测，类可未安装）
      *
-     * @var array<string, list<class-string>>
+     * @var array<string, list<string>>
      */
     private const array SPLIT_CANDIDATES = [
         ResponseFactoryInterface::class => [

@@ -182,10 +182,8 @@ final class CacheMiddleware implements MiddlewareInterface
         }
 
         while (count($this->cache) > $this->maxEntries) {
+            // 循环条件保证 count > maxEntries >= 1，首键必存在
             $oldest = array_key_first($this->cache);
-            if ($oldest === null) {
-                break;
-            }
             unset($this->cache[$oldest]);
         }
     }

@@ -81,6 +81,7 @@ final class AuthMiddleware implements MiddlewareInterface
             self::TYPE_BEARER => $request->withHeader('Authorization', 'Bearer ' . $credential),
             self::TYPE_API_KEY => $request->withHeader($this->apiKeyHeader, $credential),
             self::TYPE_BASIC => $request->withHeader('Authorization', 'Basic ' . $credential),
+            default => throw new ConfigurationException('不支持的认证类型: ' . $this->type),
         };
 
         return $next($request);

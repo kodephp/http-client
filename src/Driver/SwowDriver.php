@@ -96,7 +96,6 @@ final class SwowDriver implements ConcurrentDriverInterface
         $results = [];
         $coroutines = [];
 
-        /** @var class-string $coroutineClass */
         $coroutineClass = self::COROUTINE_CLASS;
 
         foreach ($requests as $key => $request) {
@@ -146,7 +145,6 @@ final class SwowDriver implements ConcurrentDriverInterface
         $port = $uri->getPort() ?? ($uri->getScheme() === 'https' ? 443 : 80);
         $ssl = $uri->getScheme() === 'https';
 
-        /** @var class-string $clientClass */
         $clientClass = self::CLIENT_CLASS;
 
         try {
